@@ -50,9 +50,9 @@ header udp_t {
 }
 
 header FS_h_t {
-    bit<16>  ID;
-    bit<16>  binid;
-    bit<16>  sketchid;
+    bit<8>  ID;
+    bit<32>  binid;
+    bit<8>  sketchid;
 }
 
 header FS_s_t {
@@ -63,25 +63,19 @@ header FS_s_t {
 }
 
 header tcp_t {
-    bit<16>  sPort;
-    bit<16>  dPort;
+    bit<16>  srcPort;
+    bit<16>  dstPort;
     bit<32>  seqNo;
     bit<32>  ackNo;
     bit<4>  dataOffset;
     bit<3>  res;
     bit<3>  ecn;
-    bit<6>  ctrl；
+    bit<6>  ctrl;
     bit<16>  window;
     bit<16>  checksum;
     bit<16>  urgentPtr;
 }
 
-header udp_t {
-    bit<16>  sPort;
-    bit<16>  dPort;
-    bit<16>  hdr_length;
-    bit<16>  checksum;
-}
 
 struct headers {
     ethernet_t   ethernet;
@@ -89,20 +83,21 @@ struct headers {
     FS_s_t    FS_s;
     dot1q_t      dot1q;
     ipv4_t    ipv4;
-    tcp_t      tcp；
-    udp_t      udp；
+    tcp_t      tcp;
+    udp_t      udp;
 }
 
 struct dint_metadata_t {
 	bit<32> index;
  	bit<32> index1;
-	bit<105> register_value;
+	bit<32> register_value;
+	bit<32> register_value1;
 	bit<32> srcAddr;
 	bit<32> dstAddr;
 	bit<16> srcPort;
 	bit<16> dstPort;
 	bit<8> protocol;
-        bit<8> device_no;
+        bit<8> deviceno;
   	bit<32> pktnum;
   	bit<32> data;
   	bit<32> data1;
@@ -160,7 +155,17 @@ parser MyParser(packet_in packet,
             17: parse_udp;
             default: accept;
         }  
-    }    
+    }
+
+   state parse_tcp {
+        packet.extract(hdr.tcp);
+        transition accept;
+    }
+   state parse_udp {
+        packet.extract(hdr.udp);
+        transition accept;
+    }
+    
 }
 
 /*************************************************************************
@@ -179,7 +184,6 @@ control MyVerifyChecksum(inout headers hdr, inout metadata meta) {
 control MyIngress(inout headers hdr,
                   inout metadata meta,
                   inout standard_metadata_t standard_metadata) {
-    @name("drop")
     action drop() {
         mark_to_drop();
     }
@@ -241,16 +245,16 @@ control MyEgress(inout headers hdr,
 
 
  
-  	@name("tcp_hash")
+
  	action tcp_hash() {
 		hash(meta.dint_metadata.index, HashAlgorithm.crc32, (bit<32>)0, {hdr.ipv4.srcAddr, hdr.ipv4.dstAddr, hdr.tcp.srcPort, hdr.tcp.dstPort, hdr.ipv4.protocol}, 32w65536);
 	}
-  	@name("ipv4_hash")
+
  	action ipv4_hash() {
 		hash(meta.dint_metadata.index, HashAlgorithm.crc32, (bit<32>)0, {hdr.ipv4.srcAddr, hdr.ipv4.dstAddr}, 32w65536);
 	}
 
- 	@name("tcp_hash_tbl")
+ 
 	table tcp_hash_tbl {
 		actions = {
 			tcp_hash;
@@ -259,7 +263,7 @@ control MyEgress(inout headers hdr,
 		size = 1024;
 		default_action = tcp_hash();
 	}
- 	@name("ipv4_hash_tbl")
+ 
 	table ipv4_hash_tbl {
 		actions = {
 			ipv4_hash;
@@ -272,7 +276,7 @@ control MyEgress(inout headers hdr,
 
 
 
-       @name("udp_hash")
+     
 	action udp_hash() {
 		hash(meta.dint_metadata.index, HashAlgorithm.crc32, (bit<32>)0, {hdr.ipv4.srcAddr, hdr.ipv4.dstAddr, hdr.udp.srcPort, hdr.udp.dstPort, hdr.ipv4.protocol}, 32w65536);
 	}
@@ -280,7 +284,7 @@ control MyEgress(inout headers hdr,
 		hash(meta.dint_metadata.index1, HashAlgorithm.crc16, (bit<32>)0, {hdr.ipv4.srcAddr, hdr.ipv4.dstAddr, hdr.udp.srcPort, hdr.udp.dstPort, hdr.ipv4.protocol}, 32w65536);
 	}
  
-	@name("udp_hash_tbl")
+
 	table udp_hash_tbl {
 		actions = {
 			udp_hash;
@@ -289,7 +293,7 @@ control MyEgress(inout headers hdr,
 		size = 1024;
 		default_action = udp_hash();
 	}
- 	@name("udp_hash_tbl1")
+ 
 	table udp_hash_tbl1 {
 		actions = {
 			udp_hash1;
@@ -298,13 +302,13 @@ control MyEgress(inout headers hdr,
 		size = 1024;
 		default_action = udp_hash1();
 	}
-       @name("read_register")
+
 	action read_register() {
 		fs_a_1_1.read(meta.dint_metadata.register_value, meta.dint_metadata.index);
 		fs_a_1_2.read(meta.dint_metadata.register_value1, meta.dint_metadata.index1);
                 colum.read(meta.dint_metadata.pktnum, 0);
 	}
-	@name("read_register_tbl")
+
 	table read_register_tbl {
 		actions = {
 			read_register;
@@ -313,13 +317,12 @@ control MyEgress(inout headers hdr,
 		size = 1024;
 		default_action = read_register();
 	}
-       @name("read_register_b")
+
 	action read_register_b() {
 		fs_b_1_1.read(meta.dint_metadata.register_value, meta.dint_metadata.index);
 		fs_b_1_2.read(meta.dint_metadata.register_value1, meta.dint_metadata.index1);
                 colum.read(meta.dint_metadata.pktnum, 0);
 	}
-	@name("read_register_tbl_b")
 	table read_register_tbl_b {
 		actions = {
 			read_register_b;
@@ -329,14 +332,14 @@ control MyEgress(inout headers hdr,
 		default_action = read_register_b();
 	}
 
-       @name("insert_data")
+ 
 	action insert_data() {
 		fs_a_1_1.read(meta.dint_metadata.data, meta.dint_metadata.pktnum);
 		fs_a_1_2.read(meta.dint_metadata.data1, meta.dint_metadata.pktnum);
 		fs_a_1_1.write(meta.dint_metadata.pktnum,0);
 		fs_a_1_2.write(meta.dint_metadata.pktnum,0);
 	}
-	@name("insert_data_tbl")
+
 	table insert_data_tbl {
 		actions = {
 			insert_data;
@@ -346,14 +349,14 @@ control MyEgress(inout headers hdr,
 		default_action = insert_data();
 	}
 
-       @name("insert_data")
+
 	action insert_data_b() {
 		fs_b_1_1.read(meta.dint_metadata.data, meta.dint_metadata.pktnum);
 		fs_b_1_2.read(meta.dint_metadata.data1, meta.dint_metadata.pktnum);
 		fs_b_1_1.write(meta.dint_metadata.pktnum,0);
 		fs_b_1_2.write(meta.dint_metadata.pktnum,0);
 	}
-	@name("insert_data_tbl")
+
 	table insert_data_tbl_b {
 		actions = {
 			insert_data_b;
@@ -365,7 +368,7 @@ control MyEgress(inout headers hdr,
 	action insert_FS_h() {
 		hdr.FS_h.setValid();
 		hdr.FS_h.binid = meta.dint_metadata.pktnum;
-		hdr.FS_h.sketchid = hdr.dot1q.prio;
+		hdr.FS_h.sketchid = (bit<8>)hdr.dot1q.prio;
 		hdr.FS_h.ID = meta.dint_metadata.deviceno;
 		//hdr.udp.len = hdr.udp.len+16w6;
 		//hdr.ipv4.totalLen  = hdr.ipv4.totalLen+16w6;
@@ -458,43 +461,39 @@ control MyEgress(inout headers hdr,
         apply{
 	        udp_hash_tbl.apply();
 		udp_hash_tbl1.apply();
-		if(hdr.dot1q.prio==0){   //标志位为0，初始状态
+		if(hdr.dot1q.prio==0 || hdr.dot1q.prio==2){   //标志位为0，初始状态
 		   read_register_tbl.apply();
 		   update_register_tbl.apply();
 		}
-                else if(hdr.dot1q.prio==1){ //标志为1，收集第一个sketch数据，更新第二个（b结尾的）sketch数据
+		
+		if(meta.dint_metadata.pktnum<65536 && meta.dint_metadata.pktnum>=0){
+		    do_FS_h_tbl.apply();
+ 		   if(meta.dint_metadata.deviceno==1){
+	               do_FS_s_tbl_1.apply();  //第一台交换机的数据
+		    }
+		    else{
+                       do_FS_s_tbl_2.apply(); //第二台交换机的数据
+		    }
+	          update_regpktnum_tb.apply(); //更新计数器
+                }
+		
+                if(hdr.dot1q.prio==1){ //标志为1，收集第一个sketch数据，更新第二个（b结尾的）sketch数据
 		    read_register_tbl_b.apply();
-                    if(0<=meta.dint_metadata.pktnum<65536) //收集完全部数据后不再收集，等待标志位2
+                    if(meta.dint_metadata.pktnum<65536 && meta.dint_metadata.pktnum>=0) //收集完全部数据后不再收集，等待标志位2
 			{
 			   insert_data_tbl.apply();
-			    do_FS_h_tbl.apply();
-		           if(meta.dint_metadata.deviceno==1){
-			      do_FS_s_tbl_1.apply();  //第一台交换机的数据
-		           }
-		          else{
-                              do_FS_s_tbl_2.apply(); //第二台交换机的数据
-		          } 
-			update_regpktnum_tb.apply(); //更新计数器
 		    }
 		   update_register_tbl_b.apply();
                }
-	     else {
-		   read_register_tbl.apply();
-                    if(0<=meta.dint_metadata.pktnum<65536)
+	     else if(hdr.dot1q.prio==2) {
+                    if(meta.dint_metadata.pktnum<65536 && meta.dint_metadata.pktnum>=0)
 			{
 			   insert_data_tbl_b.apply();
-			    do_FS_h_tbl.apply();
-		           if(meta.dint_metadata.deviceno==1){
-			      do_FS_s_tbl_1.apply();
-		           }
-		           else{
-                              do_FS_s_tbl_2.apply();
-		          } 
-			update_regpktnum_tb.apply();
 		    }
-		   update_register_tbl.apply();
 	     }
 	}
+
+	
 }
 
 /*************************************************************************
