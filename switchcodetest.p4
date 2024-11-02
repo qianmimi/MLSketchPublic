@@ -9,6 +9,27 @@
 #define SKETCH_BUCKET_LENGTH 28
 #define SKETCH_CELL_BIT_WIDTH 64
 
+header share_metadata_t {
+    bit<8> appID;
+    bit<8> width;
+    bit<8> type;
+    bit<16> srcPort;
+    bit<16> dstPort;
+    bit<8> protocol;
+    bit<1> matchFlag;
+    bit<1> hi_Flag;
+    bit<1> lo_Flag;
+    bit<16> delta_lo;
+    bit<32> delta_hi;  
+    bit<1> reg_groupID;
+    bit<4> rsvd;   
+};
+
+struct metadata_t {
+    share_metadata_t share_metadata;
+};
+
+
 #define SKETCH_REGISTER(num) register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) sketch##num
 
 /*#define SKETCH_COUNT(num, algorithm) hash(meta.index_sketch##num, HashAlgorithm.algorithm, (bit<16>)0, {(bit<32>)1}, (bit<32>)SKETCH_BUCKET_LENGTH);\
@@ -74,8 +95,27 @@ control MyIngress(inout headers hdr,
         default_action = drop;
     }
 
-    apply {
+   action set_app_para(bit<8> width, bit<8> type, bit<8> app_id){
+        share_metadata.width = wide;
+        share_metadata.type = type;
+        share_metadata.app_id = app_id;
+    }
 
+    table init_tbl {
+        key = {
+            standard_metadata.ingress_port: exact; //不同的ingress_port对应不同的app_id
+        }
+        actions = {
+            set_app_para;
+            NoAction;
+        }
+        size = 64;
+        default_action = NoAction;
+    }
+
+
+    apply {
+        init_tbl.apply();
         //apply sketch
         if (hdr.ipv4.isValid() && hdr.tcp.isValid()){
             sketch_count();
