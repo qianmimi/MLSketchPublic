@@ -32,6 +32,7 @@ struct metadata_t {
 
 #define SKETCH_REGISTER(num) register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) sketch##num
 
+
 /*#define SKETCH_COUNT(num, algorithm) hash(meta.index_sketch##num, HashAlgorithm.algorithm, (bit<16>)0, {(bit<32>)1}, (bit<32>)SKETCH_BUCKET_LENGTH);\
  sketch##num.read(meta.value_sketch##num, meta.index_sketch##num); \
  meta.value_sketch##num = meta.value_sketch##num +1; \
@@ -59,6 +60,10 @@ control MyVerifyChecksum(inout headers hdr, inout metadata meta) {
 control MyIngress(inout headers hdr,
                   inout metadata meta,
                   inout standard_metadata_t standard_metadata) {
+
+    register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) app_pkts_cnt;
+    register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) app_pkts_total_cnt;
+    register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) app_miss_cnt;
 
     SKETCH_REGISTER(0);
     SKETCH_REGISTER(1);
@@ -112,6 +117,22 @@ control MyIngress(inout headers hdr,
         size = 64;
         default_action = NoAction;
     }
+
+        //Read counters
+        app_pkts_cnt.read(share_metadata.pkts_cnt, share_metadata.app_id);
+        app_pkts_total_cnt.read(share_metadata.pkts_total_cnt, share_metadata.app_id);
+        app_miss_cnt.read(share_metadata.miss_cnt, share_metadata.app_id);
+
+        share_metadata.pkts_cnt = share_metadata.pkts_cnt + 1;
+        share_metadata.pkts_total_cnt = share_metadata.pkts_total_cnt + 1;
+        share_metadata.miss_cnt = share_metadata.miss_cnt + 1;
+
+        //write counters
+
+        app_pkts_cnt.write(share_metadata.app_id,share_metadata.pkts_cnt);
+        app_pkts_total_cnt.write(share_metadata.app_id,share_metadata.pkts_total_cnt);
+        app_miss_cnt.write(share_metadata.app_id,share_metadata.miss_cnt);
+
 
 
     apply {
