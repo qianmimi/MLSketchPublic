@@ -64,6 +64,8 @@ control MyIngress(inout headers hdr,
     register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) app_pkts_cnt;
     register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) app_pkts_total_cnt;
     register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) app_miss_cnt;
+    register<bit<SKETCH_CELL_BIT_WIDTH>>(1) gmrPointer;
+    register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) slotPointer;
 
     SKETCH_REGISTER(0);
     SKETCH_REGISTER(1);
@@ -118,6 +120,48 @@ control MyIngress(inout headers hdr,
         default_action = NoAction;
     }
 
+   action incr_pkt_total_num(){
+        app_pkts_total_cnt.read(share_metadata.pkts_total_cnt, share_metadata.app_id);
+        share_metadata.pkts_total_cnt = share_metadata.pkts_total_cnt + 1;
+        app_pkts_total_cnt.write(share_metadata.app_id,share_metadata.pkts_total_cnt);
+    }
+
+    table total_incr_total_pkt_tbl {
+        actions = {
+            incr_pkt_total_num;
+            NoAction;
+        }
+        size = 64;
+        default_action = NoAction;
+    }
+
+   action read_gmrPointer(){
+        gmrPointer.read(share_metadata.gmrPointer, 0);
+    }
+
+    table read_gmrPointer_tbl {
+        actions = {
+            read_gmrPointer;
+            NoAction;
+        }
+        size = 64;
+        default_action = NoAction;
+    }
+
+   action read_slotIDPointer(){
+        slotPointer.read(share_metadata.slotIDPos, share_metadata.gmrPointer);
+    }
+
+    table read_slotIDPointer_tbl {
+        actions = {
+            read_slotIDPointer;
+            NoAction;
+        }
+        size = 64;
+        default_action = NoAction;
+    }
+
+
         //Read counters
         app_pkts_cnt.read(share_metadata.pkts_cnt, share_metadata.app_id);
         app_pkts_total_cnt.read(share_metadata.pkts_total_cnt, share_metadata.app_id);
@@ -133,10 +177,31 @@ control MyIngress(inout headers hdr,
         app_pkts_total_cnt.write(share_metadata.app_id,share_metadata.pkts_total_cnt);
         app_miss_cnt.write(share_metadata.app_id,share_metadata.miss_cnt);
 
+   action set_partition_block(bit<8> hstart, bit<8> hend, bit<8> voff){
+        share_metadata.hstart = hstart;
+        share_metadata.hend = hend;
+        share_metadata.voff = voff;
+    }
+
+    table parti_tbl {
+        key = {
+            standard_metadata.slotID: exact; 
+        }
+        actions = {
+            set_partition_block;
+            NoAction;
+        }
+        size = 64;
+        default_action = NoAction;
+    }
 
 
     apply {
+        read_slotPointer_tbl.apply();
+        total_pkt_tbl.apply();
         init_tbl.apply();
+        parti_tbl.apply();
+        read_slotIDPointer_tbl.apply();
         //apply sketch
         if (hdr.ipv4.isValid() && hdr.tcp.isValid()){
             sketch_count();
