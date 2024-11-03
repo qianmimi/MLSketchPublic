@@ -8,6 +8,7 @@
 /* CONSTANTS */
 #define SKETCH_BUCKET_LENGTH 28
 #define SKETCH_CELL_BIT_WIDTH 64
+#define Count 1024
 
 header share_metadata_t {
     bit<8> appID;
@@ -197,13 +198,33 @@ control MyIngress(inout headers hdr,
     }
 
    action update_page_act(){
-        pageTable.read(share_metadata.old_addr, share_metadata.app_id);
-        pageTable.write(share_metadata.app_id,(bit<32>)share_metadata.hoff&&(bit<32>)(32<<share_metadata.hvoff));
+        pageTable.read(share_metadata.addr, share_metadata.app_id);
+        pageTable.write(share_metadata.app_id,(bit<32>)share_metadata.hoff&&(bit<32>)(32<<share_metadata.voff));
     }
 
     table Update_page_tbl {
         actions = {
             update_page_act;
+        }
+    }
+
+   action Read_page_act(){
+        pageTable.read(share_metadata.addr, share_metadata.app_id);
+    }
+
+    table Read_page_tbl {
+        actions = {
+            Read_page_act;
+        }
+    }
+
+   action Get_stageID_act(){
+        share_metadata.stageID=share_metadata.hoff>>5+1;
+    }
+
+    table Get_stageID_tbl {
+        actions = {
+            Get_stageID_act;
         }
     }
 
@@ -216,6 +237,7 @@ control MyIngress(inout headers hdr,
         parti_tbl.apply();
         read_slotIDhPos_tbl.apply();
         read_gmrPointer_tbl.apply();
+        if((share_metadata.pkts_total_cnt-5)%Count==0&&share_metadata.allocFlag==0){ //内存分配
         if(share_metadata.hPos+share_metadata.width<share_metadata.hend){
             if(share_metadata.hPos%32<width){
                 share_metadata.hPos=(share_metadata.hPos>>5+1)<<5;
@@ -223,6 +245,12 @@ control MyIngress(inout headers hdr,
         }
         share_metadata.hoff=share_metadata.hPos;
         Update_page_tbl.apply();
+       }
+        else{//直接读取页表
+            Read_page_tbl.apply();
+        }
+        Get_stageID_tbl.apply();
+    
         
         //apply sketch
         if (hdr.ipv4.isValid() && hdr.tcp.isValid()){
