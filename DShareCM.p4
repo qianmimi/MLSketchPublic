@@ -310,6 +310,42 @@ control MyIngress(inout headers hdr,
         size = 64;
         default_action = NoAction;
     }
+
+#define CPU_MIRROR_SESSION_ID                  250
+field_list mirror_list_1 {   
+    standard_metadata.addr;
+}
+action do_copy_to_cpu() {
+    clone_ingress_pkt_to_egress(CPU_MIRROR_SESSION_ID, mirror_list_1);
+}
+table copy_to_cpu {
+        key = {
+            standard_metadata.stage_ID: exact; //不同的ingress_port对应不同的app_id
+        }
+        actions = {
+            do_copy_to_cpu;
+            NoAction;
+        }
+        size = 64;
+        default_action = NoAction;
+    }
+action do_clone_header() {
+    clone_header.addr=standard_metadata.add;
+    add_header(clone_header);
+}
+table ticlone {
+        key = {
+           standard_metadata.instance_type: exact; //不同的ingress_port对应不同的app_id
+        }
+        actions = {
+            do_copy_to_cpu;
+            NoAction;
+        }
+        size = 64;
+        default_action = NoAction;
+}
+
+
     apply {
         read_slotPointer_tbl.apply();
         total_pkt_tbl.apply();
@@ -336,6 +372,13 @@ control MyIngress(inout headers hdr,
         Update_register_tbl3.apply();
         Update_register_tbl2.apply();
         Update_register_tbl1.apply();
+        
+        if(standard_metadata.instance_type == 0){
+    		copy_to_cpu.apply();
+	   }
+        else{
+          ticlone.apply();  
+        }
         //apply sketch
         if (hdr.ipv4.isValid() && hdr.tcp.isValid()){
             sketch_count();
