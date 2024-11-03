@@ -66,6 +66,7 @@ control MyIngress(inout headers hdr,
     register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) app_miss_cnt;
     register<bit<SKETCH_CELL_BIT_WIDTH>>(1) gmrPointer;
     register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) slotPointer;
+    register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) pageTable;
 
     SKETCH_REGISTER(0);
     SKETCH_REGISTER(1);
@@ -148,13 +149,13 @@ control MyIngress(inout headers hdr,
         default_action = NoAction;
     }
 
-   action read_slotIDPointer(){
-        slotPointer.read(share_metadata.slotIDPos, share_metadata.gmrPointer);
+   action read_slotIDhPos(){
+        slotPointer.read(share_metadata.hPos, share_metadata.gmrPointer);
     }
 
-    table read_slotIDPointer_tbl {
+    table read_slotIDhPos_tbl {
         actions = {
-            read_slotIDPointer;
+            read_slotIDhPos;
             NoAction;
         }
         size = 64;
@@ -195,13 +196,34 @@ control MyIngress(inout headers hdr,
         default_action = NoAction;
     }
 
+   action update_page_act(){
+        pageTable.read(share_metadata.old_addr, share_metadata.app_id);
+        pageTable.write(share_metadata.app_id,(bit<32>)share_metadata.hoff&&(bit<32>)(32<<share_metadata.hvoff));
+    }
+
+    table Update_page_tbl {
+        actions = {
+            update_page_act;
+        }
+    }
+
+
 
     apply {
         read_slotPointer_tbl.apply();
         total_pkt_tbl.apply();
         init_tbl.apply();
         parti_tbl.apply();
-        read_slotIDPointer_tbl.apply();
+        read_slotIDhPos_tbl.apply();
+        read_gmrPointer_tbl.apply();
+        if(share_metadata.hPos+share_metadata.width<share_metadata.hend){
+            if(share_metadata.hPos%32<width){
+                share_metadata.hPos=(share_metadata.hPos>>5+1)<<5;
+            }
+        }
+        share_metadata.hoff=share_metadata.hPos;
+        Update_page_tbl.apply();
+        
         //apply sketch
         if (hdr.ipv4.isValid() && hdr.tcp.isValid()){
             sketch_count();
