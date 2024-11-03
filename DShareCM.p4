@@ -8,7 +8,7 @@
 /* CONSTANTS */
 #define SKETCH_BUCKET_LENGTH 28
 #define SKETCH_CELL_BIT_WIDTH 64
-#define Count 1024
+#define slotSize 1024
 
 header share_metadata_t {
     bit<8> appID;
@@ -33,12 +33,6 @@ struct metadata_t {
 
 #define SKETCH_REGISTER(num) register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) sketch##num
 
-
-/*#define SKETCH_COUNT(num, algorithm) hash(meta.index_sketch##num, HashAlgorithm.algorithm, (bit<16>)0, {(bit<32>)1}, (bit<32>)SKETCH_BUCKET_LENGTH);\
- sketch##num.read(meta.value_sketch##num, meta.index_sketch##num); \
- meta.value_sketch##num = meta.value_sketch##num +1; \
- sketch##num.write(meta.index_sketch##num, meta.value_sketch##num)
-*/
 
 #define SKETCH_COUNT(num, algorithm) hash(meta.index_sketch##num, HashAlgorithm.algorithm, (bit<16>)0, {hdr.ipv4.srcAddr, \
  hdr.ipv4.dstAddr, hdr.tcp.srcPort, hdr.tcp.dstPort, hdr.ipv4.protocol}, (bit<32>)SKETCH_BUCKET_LENGTH);\
@@ -164,6 +158,7 @@ control MyIngress(inout headers hdr,
     }
 
 
+
         //Read counters
         app_pkts_cnt.read(share_metadata.pkts_cnt, share_metadata.app_id);
         app_pkts_total_cnt.read(share_metadata.pkts_total_cnt, share_metadata.app_id);
@@ -228,8 +223,93 @@ control MyIngress(inout headers hdr,
         }
     }
 
+   action Get_vaddr_act(){
+        share_metadata.vaddr=share_metadata.hash_out%slotSize+voff;
+    }
 
+    table Get_vaddr_tbl {
+        actions = {
+            Get_vaddr_act;
+        }
+    }
 
+   action Get_haddr_act(){
+        share_metadata.haddr=share_metadata.hoff%32;
+    }
+
+    table Get_haddr_tbl {
+        actions = {
+            Get_haddr_act;
+        }
+    }
+
+   action Operator_value_act(bit<32> mask){
+        share_metadata.val=1&mask;
+    }
+
+    table Operator_value_tbl {
+        key = {
+            share_metadata.haddr: range; 
+        }
+        actions = {
+            Operator_value_act;
+            NoAction;
+        }
+        size = 64;
+        default_action = NoAction;
+    }
+   action Update_register_act1(){
+         sketch1.read(meta.value_sketch1, share_metadata.vaddr);
+         meta.value_sketch1 = meta.value_sketch1 +share_metadata.val;
+         sketch1.write(share_metadata.vaddr meta.value_sketch1)
+    }
+
+    table Update_register_tbl1 {
+        key = {
+            standard_metadata.stage_ID: exact; //不同的ingress_port对应不同的app_id
+        }
+        actions = {
+            Update_register_act1;
+            NoAction;
+        }
+        size = 64;
+        default_action = NoAction;
+    }
+   action Update_register_act2(){
+         sketch2.read(meta.value_sketch2, share_metadata.vaddr);
+         meta.value_sketch2 = meta.value_sketch2 +share_metadata.val;
+         sketch1.write(share_metadata.vaddr meta.value_sketch2)
+    }
+
+    table Update_register_tbl2 {
+        key = {
+            standard_metadata.stage_ID: exact; //不同的ingress_port对应不同的app_id
+        }
+        actions = {
+            Update_register_act2;
+            NoAction;
+        }
+        size = 64;
+        default_action = NoAction;
+    }
+
+   action Update_register_act3(){
+         sketch1.read(meta.value_sketch3, share_metadata.vaddr);
+         meta.value_sketch3 = meta.value_sketch3 +share_metadata.val;
+         sketch1.write(share_metadata.vaddr meta.value_sketch3)
+    }
+
+    table Update_register_tbl3 {
+        key = {
+            standard_metadata.stage_ID: exact; //不同的ingress_port对应不同的app_id
+        }
+        actions = {
+            Update_register_act3;
+            NoAction;
+        }
+        size = 64;
+        default_action = NoAction;
+    }
     apply {
         read_slotPointer_tbl.apply();
         total_pkt_tbl.apply();
@@ -250,13 +330,16 @@ control MyIngress(inout headers hdr,
             Read_page_tbl.apply();
         }
         Get_stageID_tbl.apply();
-    
-        
+        Get_vaddr_tbl.apply();
+        Get_haddr_tbl.apply();
+        Operator_value_tbl.apply();
+        Update_register_tbl3.apply();
+        Update_register_tbl2.apply();
+        Update_register_tbl1.apply();
         //apply sketch
         if (hdr.ipv4.isValid() && hdr.tcp.isValid()){
             sketch_count();
         }
-
         forwarding.apply();
     }
 }
