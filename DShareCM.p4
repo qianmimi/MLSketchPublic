@@ -131,6 +131,37 @@ control MyIngress(inout headers hdr,
         default_action = NoAction;
     }
 
+   action app_pkts_cnt_num(){
+        app_pkts_cnt.read(share_metadata.app_pkts_cnt, share_metadata.app_id);
+        share_metadata.app_pkts_cnt = share_metadata.app_pkts_cnt + 1;
+        app_pkts_cnt.write(share_metadata.app_id,share_metadata.app_pkts_cnt);
+    }
+
+    table app_pkts_cnt_tbl {
+        actions = {
+            app_pkts_cnt_num;
+            NoAction;
+        }
+        size = 64;
+        default_action = NoAction;
+    }
+
+   action app_miss_cnt_num(){
+        app_miss_cnt.read(share_metadata.app_miss_cnt, share_metadata.app_id);
+        share_metadata.app_miss_cnt = share_metadata.app_miss_cnt + 1;
+        app_miss_cnt.write(share_metadata.app_id,share_metadata.app_miss_cnt);
+    }
+
+    table app_miss_cnt_tbl {
+        actions = {
+            app_miss_cnt_num;
+            NoAction;
+        }
+        size = 64;
+        default_action = NoAction;
+    }
+
+
    action read_gmrPointer(){
         gmrPointer.read(share_metadata.gmrPointer, 0);
     }
@@ -156,23 +187,6 @@ control MyIngress(inout headers hdr,
         size = 64;
         default_action = NoAction;
     }
-
-
-
-        //Read counters
-        app_pkts_cnt.read(share_metadata.pkts_cnt, share_metadata.app_id);
-        app_pkts_total_cnt.read(share_metadata.pkts_total_cnt, share_metadata.app_id);
-        app_miss_cnt.read(share_metadata.miss_cnt, share_metadata.app_id);
-
-        share_metadata.pkts_cnt = share_metadata.pkts_cnt + 1;
-        share_metadata.pkts_total_cnt = share_metadata.pkts_total_cnt + 1;
-        share_metadata.miss_cnt = share_metadata.miss_cnt + 1;
-
-        //write counters
-
-        app_pkts_cnt.write(share_metadata.app_id,share_metadata.pkts_cnt);
-        app_pkts_total_cnt.write(share_metadata.app_id,share_metadata.pkts_total_cnt);
-        app_miss_cnt.write(share_metadata.app_id,share_metadata.miss_cnt);
 
    action set_partition_block(bit<8> hstart, bit<8> hend, bit<32> voff){
         share_metadata.hstart = hstart;
