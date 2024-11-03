@@ -177,7 +177,7 @@ control MyIngress(inout headers hdr,
         app_pkts_total_cnt.write(share_metadata.app_id,share_metadata.pkts_total_cnt);
         app_miss_cnt.write(share_metadata.app_id,share_metadata.miss_cnt);
 
-   action set_partition_block(bit<8> hstart, bit<8> hend, bit<8> voff){
+   action set_partition_block(bit<8> hstart, bit<8> hend, bit<32> voff){
         share_metadata.hstart = hstart;
         share_metadata.hend = hend;
         share_metadata.voff = voff;
