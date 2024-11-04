@@ -40,7 +40,7 @@ struct metadata_t {
  hdr.ipv4.dstAddr, hdr.tcp.srcPort, hdr.tcp.dstPort, hdr.ipv4.protocol}, (bit<32>)SKETCH_BUCKET_LENGTH);\
  sketch##num.read(meta.value_sketch##num, meta.index_sketch##num); \
  meta.value_sketch##num = meta.value_sketch##num +1; \
- sketch##num.write(meta.index_sketch##num, meta.value_sketch##num)
+ sketch##num.(meta.index_sketch##num, meta.value_sketch##num)
 
 /*************************************************************************
 ************   C H E C K S U M    V E R I F I C A T I O N   *************
@@ -137,8 +137,8 @@ action Calc_hash(){
    action read_pagetbl_act(){ //num用幂次方来表示，初始值为0,1,2,3...
         pageTable.read(share_metadata.addr, share_metadata.app_id);
 	share_metadata.voff=(bit<32>)share_metadata.addr>>32;
-	share_metadata.hoff=(bit<16>)(addr >> 16) & 0xffff;
-	share_metadata.bnum=(bit<16>) addr & 0xffff;
+	share_metadata.hoff=(bit<16>)(share_metadata.addr >> 16) & 0xffff;
+	share_metadata.bnum=(bit<16>) share_metadata.addr & 0xffff;
     }
 
     table read_pagetbl_tbl {
@@ -146,6 +146,17 @@ action Calc_hash(){
             read_pagetbl_act;
         }
     }
+
+   action write_pagetbl_act(){ //num用幂次方来表示，初始值为0,1,2,3...
+        pageTable.write(share_metadata.app_id,share_metadata.addr);
+    }
+
+    table write_pagetbl_tbl {
+        actions = {
+            write_pagetbl_act;
+        }
+    }
+
 
 //转换，stageID=hoff>>5+1; pa=(h(*)<<bnum)%16384+voff; pval=(h(*)<<bnum)/16384*widthbit+hoff%b
 
@@ -178,7 +189,7 @@ action Calc_hash(){
    action Update_register_act1(){
          sketch1.read(share_metadata.value_sketch, share_metadata.paddr);
          share_metadata.value_sketch = share_metadata.value_sketch | share_metadata.mask;
-         sketch1.write(share_metadata.paddr, share_metadata.value_sketch);
+         sketch1.(share_metadata.paddr, share_metadata.value_sketch);
     }
 
     table Update_register_tbl1 {
@@ -195,7 +206,7 @@ action Calc_hash(){
    action Update_register_act2(){
          sketch2.read(share_metadata.value_sketch, share_metadata.paddr);
          share_metadata.value_sketch = share_metadata.value_sketch | share_metadata.mask;
-         sketch2.write(share_metadata.paddr,share_metadata.value_sketch);
+         sketch2.(share_metadata.paddr,share_metadata.value_sketch);
     }
 
     table Update_register_tbl2 {
@@ -213,7 +224,7 @@ action Calc_hash(){
    action Update_register_act3(){
          sketch3.read(share_metadata.value_sketch, share_metadata.paddr);
          share_metadata.value_sketch = share_metadata.value_sketch | share_metadata.mask;
-         sketch3.write(share_metadata.paddr,share_metadata.value_sketch);
+         sketch3.(share_metadata.paddr,share_metadata.value_sketch);
     }
 
     table Update_register_tbl3 {
@@ -232,7 +243,7 @@ action Calc_hash(){
         app_pkts_cnt.read(share_metadata.app_pkts_cnt, share_metadata.app_id);
 	if(share_metadata.value_sketch==0){
 	     share_metadata.app_pkts_cnt = share_metadata.app_pkts_cnt + 1;
-             app_pkts_cnt.write(share_metadata.app_id,share_metadata.app_pkts_cnt);
+             app_pkts_cnt.(share_metadata.app_id,share_metadata.app_pkts_cnt);
 	}
     }
 
@@ -241,6 +252,16 @@ action Calc_hash(){
             app_pkts_cnt_num;
         }
     }
+   action app_reset_hit_num(){
+        app_pkts_cnt.(share_metadata.app_id,0);
+    }
+
+    table app_reset_hit_tbl {
+        actions = {
+            app_reset_hit_num;
+        }
+    }
+
    action load_factor_act1(){
 	share_metadata.allocFlag=1;
     }
@@ -298,19 +319,49 @@ action Calc_hash(){
         default_action = NoAction;
     }
 
-   action read_slotIDhPos(){
+   action allocsuc_slotIDhPos(){
+	//slotIDhPos<=hend-wide
         slotPointer.read(share_metadata.slotIDhPos, share_metadata.slotID);
+	if(share_metadata.slotIDhPos+share_metadata.wide<share_metadata.hend){
+	share_metadata.slotIDhPos=share_metadata.slotIDhPos+share_metadata.wide;
+	share_metadata.nvoff=share_metadata.voff;
+	share_metadata.nhoff=share_metadata.slotIDhPos;
+	slotPointer.(share_metadata.slotID,share_metadata.slotIDhPos);
+	share_metadata.sucess=1;
+	}
     }
 
     table read_slotIDhPos_tbl {
         key = {
 	    share_metadata.allocFlag: exact;
-	    share_metadata.hend: exact;
-	    share_metadata.wide_bit:exact;
+	    share_metadata.hend: exact;//这个end，由于每个空闲分区表都知道它的end
+	    share_metadata.wide:exact;//1，8，16，32
 	    
         }
         actions = {
             read_slotIDhPos;
+            NoAction;
+        }
+        size = 64;
+        default_action = NoAction;
+    }
+
+   #define CPU_MIRROR_SESSION_ID                  250
+    field_list mirror_list_1 {   
+        share_metadata.addr;
+	share_metadata.app_id;
+   }
+   action clone_forupdate_act(){
+	share_metadata.addr=(share_metadata.nvoff<<32)| (share_metadata.nhoff<<16) | (share_metadata.bnum<<1);
+	clone_ingress_pkt_to_egress(CPU_MIRROR_SESSION_ID, mirror_list_1);
+    }
+
+    table clone_forupdate_tbl {
+        key = {
+	    share_metadata.sucess: exact;
+        }
+        actions = {
+            clone_forupdate_act;
             NoAction;
         }
         size = 64;
@@ -323,6 +374,7 @@ action Calc_hash(){
         if (hdr.ipv4.isValid() && hdr.tcp.isValid()){
 	    init_tbl.apply();初始化
 	    Calc_hash();//计算hash
+	    if(standard_metadata.instance_type==0){
 	    read_pagetbl_tbl.apply();//读取地址
 	    transfer_addr_tbl.apply(); //转化地址，获取register访问地址;
 	    operator_tarval_tbl.apply();//获得mask
@@ -333,10 +385,15 @@ action Calc_hash(){
 	    Load_factor_tbl.apply();//加载负载因子;
 	    read_gmrPointer_tbl.apply();//读取GMR当前的环形执行,得到当前slotID
 	    parti_tbl.apply();//读取空闲分区表
-	    read_slotIDhPos_tbl.apply();
-	   
-	    
-         //   sketch_count();
+	    read_slotIDhPos_tbl.apply();//分配
+	    clone_forupdate_tbl.apply();//clone数据包,去更新page table
+	  }
+	   else{  //克隆包
+		write_pagetbl_tbl.apply();更新寄存器
+		app_reset_hit_tbl.apply();重置hit_num
+
+	   }
+         //sketch_count();
         }
         forwarding.apply();
     }
