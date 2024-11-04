@@ -10,6 +10,11 @@
 #define SKETCH_CELL_BIT_WIDTH 64
 #define slotSize 1024
 
+const bit<8> EMPTY_FL    = 0;
+const bit<8> RESUB_FL_1  = 1;
+const bit<8> CLONE_FL_1  = 2;
+const bit<8> RECIRC_FL_1 = 3;
+
 header share_metadata_t {
     bit<8> appID;
     bit<8> width;
@@ -25,9 +30,14 @@ header share_metadata_t {
     bit<1> reg_groupID;
     bit<4> rsvd;   
 };
+header meta_t {
+    @field_list(CLONE_FL_1)
+    bit<64>  addr;
+}
 
 struct metadata_t {
     share_metadata_t share_metadata;
+    meta_t meta;
 };
 
 
@@ -207,7 +217,7 @@ control MyIngress(inout headers hdr,
     }
 
    action update_page_act(){
-        pageTable.read(share_metadata.addr, share_metadata.app_id);
+        pageTable.read(meta.addr, share_metadata.app_id);
         pageTable.write(share_metadata.app_id,(bit<32>)share_metadata.hoff&&(bit<32>)(32<<share_metadata.voff));
     }
 
@@ -218,7 +228,7 @@ control MyIngress(inout headers hdr,
     }
 
    action Read_page_act(){
-        pageTable.read(share_metadata.addr, share_metadata.app_id);
+        pageTable.read(meta.addr, share_metadata.app_id);
     }
 
     table Read_page_tbl {
@@ -325,10 +335,6 @@ control MyIngress(inout headers hdr,
         default_action = NoAction;
     }
 
-#define CPU_MIRROR_SESSION_ID                  250
-field_list mirror_list_1 {   
-    standard_metadata.addr;
-}
 action do_copy_to_cpu() {
     clone_ingress_pkt_to_egress(CPU_MIRROR_SESSION_ID, mirror_list_1);
 }
