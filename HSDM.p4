@@ -115,13 +115,23 @@ action Calc_hash(){
                                                           hdr.ipv4.protocol},
                                                           (bit<32>)SKETCH_BUCKET_LENGTH);
 }
+   action read_pagetbl_act(){
+        pageTable.read(share_metadata.addr, share_metadata.app_id);
+	share_metadata.voff=(bit<32>)share_metadata.addr>>32;
+	share_metadata.hoff=(bit<32>)share_metadata.addr&0xffffffff;
+    }
 
+    table read_pagetbl_tbl {
+        actions = {
+            read_pagetbl_act;
+        }
+    }
 
     apply {
         //apply sketch
         if (hdr.ipv4.isValid() && hdr.tcp.isValid()){
 	    Calc_hash();//计算hash
-	    
+	    read_pagetbl_tbl.apply();//读取地址
             sketch_count();
         }
         forwarding.apply();
