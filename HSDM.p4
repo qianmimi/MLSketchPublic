@@ -9,27 +9,8 @@
 #define SKETCH_BUCKET_LENGTH 28
 #define SKETCH_CELL_BIT_WIDTH 64
 #define slotSize 16384 //2的14次方
-const bit<8> EMPTY_FL    = 0;
-const bit<8> RESUB_FL_1  = 1;
-const bit<8> CLONE_FL_1  = 2;
-const bit<8> RECIRC_FL_1 = 3;
 
-struct meta_t {
-    bit<32> output_hash_one;
-    bit<32> output_hash_two;
-    bit<8> width;
-    bit<8> width_bit;
-    bit<8> type;
-    bit<32> voff;
-    bit<16> hoff;
-    bit<16> bnum;
-    bit<32> mask;
-    bit<32> pval;
-    @field_list(CLONE_FL_1)
-    bit<64> addr;
-    @field_list(CLONE_FL_1)
-    bit<8> app_id;  
-};
+
 
 
 
@@ -55,6 +36,10 @@ control MyIngress(inout headers hdr,
     register<bit<SKETCH_CELL_BIT_WIDTH>>(1) gmrPointer;
     register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) slotPointer;
     register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) pageTable;
+    register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) sketch1;
+    register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) sketch2;
+    register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) sketch3;
+
 
 
 
@@ -80,9 +65,9 @@ control MyIngress(inout headers hdr,
         default_action = drop;
     }
    action set_app_para(bit<8> width_bit, bit<8> type, bit<8> app_id,bit<8> width){
-        share_metadata.width_bit = width_bit;
-        share_metadata.width = width;
-        share_metadata.type = type;
+        meta.width_bit = width_bit;
+        meta.width = width;
+        meta.type = type;
         meta.app_id = app_id;
     }
 
@@ -101,14 +86,14 @@ control MyIngress(inout headers hdr,
 
 action Calc_hash(){
        //Get hash out
-       hash(share_metadata.output_hash_one, HashAlgorithm.crc16, (bit<16>)0, {hdr.ipv4.src,
+       hash(meta.output_hash_one, HashAlgorithm.crc16, (bit<16>)0, {hdr.ipv4.src,
                                                           hdr.ipv4.dst,
                                                           hdr.tcp.srcPort,
                                                           hdr.tcp.dstPort,
                                                           hdr.ipv4.protocol},
                                                           (bit<32>)SKETCH_BUCKET_LENGTH);
 
-       hash(share_metadata.output_hash_two, HashAlgorithm.crc32, (bit<16>)0, {hdr.ipv4.src,
+       hash(meta.output_hash_two, HashAlgorithm.crc32, (bit<16>)0, {hdr.ipv4.src,
                                                           hdr.ipv4.dst,
                                                           hdr.tcp.srcPort,
                                                           hdr.tcp.dstPort,
@@ -117,9 +102,9 @@ action Calc_hash(){
 }
    action read_pagetbl_act(){ //num用幂次方来表示，初始值为0,1,2,3...
         pageTable.read(meta.addr, meta.app_id);
-	share_metadata.voff=(bit<32>)meta.addr>>32;
-	share_metadata.hoff=(bit<16>)(meta.addr >> 16) & 0xffff;
-	share_metadata.bnum=(bit<16>) meta.addr & 0xffff;
+	meta.voff=(bit<32>)meta.addr>>32;
+	meta.hoff=(bit<16>)(meta.addr >> 16) & 0xffff;
+	meta.bnum=(bit<16>) meta.addr & 0xffff;
     }
 
     table read_pagetbl_tbl {
@@ -128,36 +113,28 @@ action Calc_hash(){
         }
     }
 
-   action write_pagetbl_act(){ //num用幂次方来表示，初始值为0,1,2,3...
-        pageTable.write(meta.app_id,meta.addr);
-    }
 
-    table write_pagetbl_tbl {
-        actions = {
-            write_pagetbl_act;
-        }
-    }
 
 
 //转换，stageID=hoff>>5+1; pa=(h(*)<<bnum)%16384+voff; pval=(h(*)<<bnum)/16384*widthbit+hoff%b
 
-   action transfer__act(){ 
-	share_metadata.stageID=share_metadata.hoff>>5+1;
-	share_metadata.p=((share_metadata.output_hash_one << share_metadata.bnum) & 0x3FFF) + share_metadata.voff;
-	share_metadata.pval=((share_metadata.output_hash_one << share_metadata.bnum) << 14)>>width_bit + share_metadata.hoff&31;
+   action transfer_addr_act(){ 
+	meta.stageID=meta.hoff>>5+1;
+	meta.paddr=((meta.output_hash_one << meta.bnum) & 0x3FFF) + meta.voff;
+	meta.pval=((meta.output_hash_one << meta.bnum) << 14)>>meta.width_bit + meta.hoff&31;
     }
 
-  table transfer__tbl {
+  table transfer_addr_tbl {
         actions = {
-            transfer__act;
+            transfer_addr_act;
         }
     }
    action operator_tarval_act(){ 
-	share_metadata.mask=(1<<(32-share_metadata.pval+share_metadata.width_bit));
+	meta.mask=(1<<(32-meta.pval+meta.width_bit));
      }
     table operator_tarval_tbl {
 	//key = {
-         //   share_metadata.width_bit: exact;//可能是1，8，16，32;
+         //   meta.width_bit: exact;//可能是1，8，16，32;
       //  }
         actions = {
             operator_tarval_act;
@@ -168,9 +145,9 @@ action Calc_hash(){
      //   default_action = drop;
     }
    action Update_register_act1(){
-         sketch1.read(share_metadata.value_sketch, share_metadata.p);
-         share_metadata.value_sketch = share_metadata.value_sketch | share_metadata.mask;
-         sketch1.write(share_metadata.p, share_metadata.value_sketch);
+         sketch1.read(meta.value_sketch, meta.paddr);
+         meta.value_sketch = meta.value_sketch | meta.mask;
+         sketch1.write(meta.paddr, meta.value_sketch);
     }
 
     table Update_register_tbl1 {
@@ -185,9 +162,9 @@ action Calc_hash(){
         default_action = NoAction;
     }
    action Update_register_act2(){
-         sketch2.read(share_metadata.value_sketch, share_metadata.p);
-         share_metadata.value_sketch = share_metadata.value_sketch | share_metadata.mask;
-         sketch2.write(share_metadata.p,share_metadata.value_sketch);
+         sketch2.read(meta.value_sketch, meta.paddr);
+         meta.value_sketch = meta.value_sketch | meta.mask;
+         sketch2.write(meta.paddr,meta.value_sketch);
     }
 
     table Update_register_tbl2 {
@@ -203,9 +180,9 @@ action Calc_hash(){
     }
 
    action Update_register_act3(){
-         sketch3.read(share_metadata.value_sketch, share_metadata.p);
-         share_metadata.value_sketch = share_metadata.value_sketch | share_metadata.mask;
-         sketch3.write(share_metadata.p,share_metadata.value_sketch);
+         sketch3.read(meta.value_sketch, meta.paddr);
+         meta.value_sketch = meta.value_sketch | meta.mask;
+         sketch3.write(meta.paddr,meta.value_sketch);
     }
 
     table Update_register_tbl3 {
@@ -221,10 +198,10 @@ action Calc_hash(){
     }
 
    action app_pkts_cnt_num(){
-        app_pkts_cnt.read(share_metadata.app_pkts_cnt, meta.app_id);
-	if(share_metadata.value_sketch==0){
-	     share_metadata.app_pkts_cnt = share_metadata.app_pkts_cnt + 1;
-             app_pkts_cnt.write(share_metadata.app_id,share_metadata.app_pkts_cnt);
+        app_pkts_cnt.read(meta.app_pkts_cnt, meta.app_id);
+	if(meta.value_sketch==0){
+	     meta.app_pkts_cnt = meta.app_pkts_cnt + 1;
+             app_pkts_cnt.write(meta.app_id,meta.app_pkts_cnt);
 	}
     }
 
@@ -233,27 +210,18 @@ action Calc_hash(){
             app_pkts_cnt_num;
         }
     }
-   action app_reset_hit_num(){
-        app_pkts_cnt.write(meta.app_id,0);
-    }
-
-    table app_reset_hit_tbl {
-        actions = {
-            app_reset_hit_num;
-        }
-    }
 
    action load_factor_act1(){
-	share_metadata.allocFlag=1;
+	meta.allocFlag=1;
     }
    action load_factor_act0(){
-	share_metadata.allocFlag=0;
+	meta.allocFlag=0;
     }
 
     table Load_factor_tbl {
         key = {
-            share_metadata.bnum: exact;
-	    share_metadata.app_pkts_cnt:range;
+            meta.bnum: exact;
+	    meta.app_pkts_cnt:range;
         }
         actions = {
             load_factor_act0;
@@ -265,14 +233,14 @@ action Calc_hash(){
     }
 
    action read_gmrPointer(){
-        gmrPointer.read(share_metadata.slotID, 0);
-	share_metadata.slotID=share_metadata.slotID+1;
-        gmrPointer.read(0, share_metadata.slotID);
+        gmrPointer.read(meta.slotID, 0);
+	meta.slotID=meta.slotID+1;
+        gmrPointer.read(0, meta.slotID);
     }
 
     table read_gmrPointer_tbl {
         key = {
-	    share_metadata.allocFlag: exact;
+	    meta.allocFlag: exact;
         }
         actions = {
             read_gmrPointer;
@@ -282,15 +250,15 @@ action Calc_hash(){
         default_action = NoAction;
     }
    action set_partition_block(bit<8> hstart, bit<8> hend, bit<32> voff){
-        share_metadata.hstart = hstart;
-        share_metadata.hend = hend;
-        share_metadata.voff = voff;
+        meta.hstart = hstart;
+        meta.hend = hend;
+        meta.voff = voff;
     }
 
     table parti_tbl {
         key = {
             standard_metadata.slotID: exact; 
-	    share_metadata.allocFlag: exact;
+	    meta.allocFlag: exact;
         }
         actions = {
             set_partition_block;
@@ -302,39 +270,38 @@ action Calc_hash(){
 
    action allocsuc_slotIDhPos(){
 	//slotIDhPos<=hend-wide
-        slotPointer.read(share_metadata.slotIDhPos, share_metadata.slotID);
-	if(share_metadata.slotIDhPos+share_metadata.wide<share_metadata.hend){
-	share_metadata.slotIDhPos=share_metadata.slotIDhPos+share_metadata.wide;
-	share_metadata.nvoff=share_metadata.voff;
-	share_metadata.nhoff=share_metadata.slotIDhPos;
-	slotPointer.write(share_metadata.slotID,share_metadata.slotIDhPos);
-	share_metadata.sucess=1;
+        slotPointer.read(meta.slotIDhPos, meta.slotID);
+	if(meta.slotIDhPos+meta.wide<meta.hend){
+	meta.slotIDhPos=meta.slotIDhPos+meta.wide;
+	meta.nvoff=meta.voff;
+	meta.nhoff=meta.slotIDhPos;
+	slotPointer.write(meta.slotID,meta.slotIDhPos);
+	meta.sucess=1;
 	}
     }
 
     table read_slotIDhPos_tbl {
         key = {
-	    share_metadata.allocFlag: exact;
-	    share_metadata.hend: exact;//这个end，由于每个空闲分区表都知道它的end
-	    share_metadata.wide:exact;//1，8，16，32
+	    meta.allocFlag: exact;
+	    meta.hend: exact;//这个end，由于每个空闲分区表都知道它的end
+	    meta.wide:exact;//1，8，16，32
 	    
         }
         actions = {
-            read_slotIDhPos;
+            allocsuc_slotIDhPos;
             NoAction;
         }
         size = 64;
         default_action = NoAction;
     }
-
-   action clone_forupdate_act(){
-	meta.addr=(share_metadata.nvoff<<32)| (share_metadata.nhoff<<16) | (share_metadata.bnum<<1);
-	clone_preserving_field_list(CloneType.E2E, 5, CLONE_FL_1);
+    action clone_forupdate_act(){
+	meta.addr=(meta.nvoff<<32)| (meta.nhoff<<16) | (meta.bnum<<1);
+	clone_preserving_field_list(CloneType.I2E, 5, CLONE_FL_1);
     }
 
     table clone_forupdate_tbl {
         key = {
-	    share_metadata.sucess: exact;
+	    meta.sucess: exact;
         }
         actions = {
             clone_forupdate_act;
@@ -343,7 +310,24 @@ action Calc_hash(){
         size = 64;
         default_action = NoAction;
     }
+       action write_pagetbl_act(){ //num用幂次方来表示，初始值为0,1,2,3...
+        pageTable.write(meta.app_id,meta.addr);
+    }
 
+    table write_pagetbl_tbl {
+        actions = {
+            write_pagetbl_act;
+        }
+    }
+       action app_reset_hit_num(){
+        app_pkts_cnt.write(meta.app_id,0);
+    }
+
+    table app_reset_hit_tbl {
+        actions = {
+            app_reset_hit_num;
+        }
+    }
 
     apply {
         //apply sketch，还有旧的hash位置地址还没发给控制器
@@ -362,7 +346,12 @@ action Calc_hash(){
 	    read_gmrPointer_tbl.apply();//读取GMR当前的环形执行,得到当前slotID
 	    parti_tbl.apply();//读取空闲分区表
 	    read_slotIDhPos_tbl.apply();//分配
-	//    clone_forupdate_tbl.apply();//clone数据包,去更新page table
+	    clone_forupdate_tbl.apply();//clone数据包,去更新page table
+	  }
+	  else{
+	    write_pagetbl_tbl.apply();//更新寄存器
+	    app_reset_hit_tbl.apply();//重置hit_num
+	  
 	  }
 
          //sketch_count();
@@ -377,17 +366,10 @@ action Calc_hash(){
 
 control MyEgress(inout headers hdr,
                  inout metadata meta,
-                 inout share_metadata,
                  inout standard_metadata_t standard_metadata) {
+   
     apply { 
-	if(standard_metadata.instance_type==0){
-            clone_forupdate_tbl.apply();//clone数据包,去更新page table
-	}
-	else{
-	    write_pagetbl_tbl.apply();//更新寄存器
-	    app_reset_hit_tbl.apply();//重置hit_num
 
-	}
    }
 }
 
@@ -395,7 +377,7 @@ control MyEgress(inout headers hdr,
 *************   C H E C K S U M    C O M P U T A T I O N   **************
 *************************************************************************/
 
-control MyComputeChecksum(inout headers hdr, inout metadata meta,inout share_metadata) {
+control MyComputeChecksum(inout headers hdr, inout metadata meta) {
      apply {
     }
 }
