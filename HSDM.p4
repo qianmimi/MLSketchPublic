@@ -8,15 +8,16 @@
 /* CONSTANTS */
 #define SKETCH_BUCKET_LENGTH 28
 #define SKETCH_CELL_BIT_WIDTH 64
-#define slotSize 1024
+#define slotSize 16384 //2的14次方
 
 header share_metadata_t {
     bit<8> output_hash_one;
     bit<8> output_hash_two;
     bit<8> width;
     bit<8> type;
-    bit<16> srcPort;
-    bit<16> dstPort;
+    bit<32> voff;
+    bit<16> hoff;
+    bit<16> bnum;
     bit<8> protocol;
     bit<1> matchFlag;
     bit<1> hi_Flag;
@@ -98,6 +99,24 @@ control MyIngress(inout headers hdr,
         size = 64;
         default_action = drop;
     }
+   action set_app_para(bit<8> width_bit, bit<8> type, bit<8> app_id){
+        share_metadata.width_bit = width_bit;
+        share_metadata.type = type;
+        share_metadata.app_id = app_id;
+    }
+
+    table init_tbl {
+        key = {
+            standard_metadata.ingress_port: exact; //不同的ingress_port对应不同的app_id
+        }
+        actions = {
+            set_app_para;
+            NoAction;
+        }
+        size = 64;
+        default_action = NoAction;
+    }
+
 
 action Calc_hash(){
        //Get hash out
@@ -115,10 +134,11 @@ action Calc_hash(){
                                                           hdr.ipv4.protocol},
                                                           (bit<32>)SKETCH_BUCKET_LENGTH);
 }
-   action read_pagetbl_act(){
+   action read_pagetbl_act(){ //num用幂次方来表示，初始值为0,1,2,3...
         pageTable.read(share_metadata.addr, share_metadata.app_id);
 	share_metadata.voff=(bit<32>)share_metadata.addr>>32;
-	share_metadata.hoff=(bit<32>)share_metadata.addr&0xffffffff;
+	share_metadata.hoff=(bit<16>)(addr >> 16) & 0xffff;
+	share_metadata.bnum=(bit<16>) addr & 0xffff;
     }
 
     table read_pagetbl_tbl {
@@ -127,12 +147,196 @@ action Calc_hash(){
         }
     }
 
+//转换，stageID=hoff>>5+1; pa=(h(*)<<bnum)%16384+voff; pval=(h(*)<<bnum)/16384*widthbit+hoff%b
+
+   action transfer_addr_act(){ 
+	share_metadata.stageID=share_metadata.hoff>>5+1;
+	share_metadata.paddr=((share_metadata.output_hash_one << share_metadata.bnum) & 0x3FFF) + share_metadata.voff;
+	share_metadata.pval=((share_metadata.output_hash_one << share_metadata.bnum) << 14)>>width_bit + share_metadata.hoff&31;
+    }
+
+  table transfer_addr_tbl {
+        actions = {
+            transfer_addr_act;
+        }
+    }
+   action operator_tarval_act(){ 
+	share_metadata.mask=bit<32>(1<<(32-share_metadata.pval+share_metadata.width_bit));
+     }
+    table operator_tarval_tbl {
+	//key = {
+         //   share_metadata.width_bit: exact;//可能是1，8，16，32;
+      //  }
+        actions = {
+            operator_tarval_act;
+           // drop;
+            //NoAction;
+        }
+    //    size = 64;
+     //   default_action = drop;
+    }
+   action Update_register_act1(){
+         sketch1.read(share_metadata.value_sketch, share_metadata.paddr);
+         share_metadata.value_sketch = share_metadata.value_sketch | share_metadata.mask;
+         sketch1.write(share_metadata.paddr, share_metadata.value_sketch);
+    }
+
+    table Update_register_tbl1 {
+        key = {
+            standard_metadata.stage_ID: exact; //不同的ingress_port对应不同的app_id
+        }
+        actions = {
+            Update_register_act1;
+            NoAction;
+        }
+        size = 64;
+        default_action = NoAction;
+    }
+   action Update_register_act2(){
+         sketch2.read(share_metadata.value_sketch, share_metadata.paddr);
+         share_metadata.value_sketch = share_metadata.value_sketch | share_metadata.mask;
+         sketch2.write(share_metadata.paddr,share_metadata.value_sketch);
+    }
+
+    table Update_register_tbl2 {
+        key = {
+            standard_metadata.stage_ID: exact; //不同的ingress_port对应不同的app_id
+        }
+        actions = {
+            Update_register_act2;
+            NoAction;
+        }
+        size = 64;
+        default_action = NoAction;
+    }
+
+   action Update_register_act3(){
+         sketch3.read(share_metadata.value_sketch, share_metadata.paddr);
+         share_metadata.value_sketch = share_metadata.value_sketch | share_metadata.mask;
+         sketch3.write(share_metadata.paddr,share_metadata.value_sketch);
+    }
+
+    table Update_register_tbl3 {
+        key = {
+            standard_metadata.stage_ID: exact; //不同的ingress_port对应不同的app_id
+        }
+        actions = {
+            Update_register_act3;
+            NoAction;
+        }
+        size = 64;
+        default_action = NoAction;
+    }
+
+   action app_pkts_cnt_num(){
+        app_pkts_cnt.read(share_metadata.app_pkts_cnt, share_metadata.app_id);
+	if(share_metadata.value_sketch==0){
+	     share_metadata.app_pkts_cnt = share_metadata.app_pkts_cnt + 1;
+             app_pkts_cnt.write(share_metadata.app_id,share_metadata.app_pkts_cnt);
+	}
+    }
+
+    table app_pkts_cnt_tbl {
+        actions = {
+            app_pkts_cnt_num;
+        }
+    }
+   action load_factor_act1(){
+	share_metadata.allocFlag=1;
+    }
+   action load_factor_act0(){
+	share_metadata.allocFlag=0;
+    }
+
+    table Load_factor_tbl {
+        key = {
+            share_metadata.bnum: exact;
+	    share_metadata.app_pkts_cnt:range;
+        }
+        actions = {
+            load_factor_act0;
+	    load_factor_act1;
+            NoAction;
+        }
+        size = 64;
+        default_action = NoAction;
+    }
+
+   action read_gmrPointer(){
+        gmrPointer.read(share_metadata.slotID, 0);
+	share_metadata.slotID=share_metadata.slotID+1;
+        gmrPointer.read(0, share_metadata.slotID);
+    }
+
+    table read_gmrPointer_tbl {
+        key = {
+	    share_metadata.allocFlag: exact;
+        }
+        actions = {
+            read_gmrPointer;
+            NoAction;
+        }
+        size = 64;
+        default_action = NoAction;
+    }
+   action set_partition_block(bit<8> hstart, bit<8> hend, bit<32> voff){
+        share_metadata.hstart = hstart;
+        share_metadata.hend = hend;
+        share_metadata.voff = voff;
+    }
+
+    table parti_tbl {
+        key = {
+            standard_metadata.slotID: exact; 
+	    share_metadata.allocFlag: exact;
+        }
+        actions = {
+            set_partition_block;
+            NoAction;
+        }
+        size = 64;
+        default_action = NoAction;
+    }
+
+   action read_slotIDhPos(){
+        slotPointer.read(share_metadata.slotIDhPos, share_metadata.slotID);
+    }
+
+    table read_slotIDhPos_tbl {
+        key = {
+	    share_metadata.allocFlag: exact;
+	    share_metadata.hend: exact;
+	    share_metadata.wide_bit:exact;
+	    
+        }
+        actions = {
+            read_slotIDhPos;
+            NoAction;
+        }
+        size = 64;
+        default_action = NoAction;
+    }
+
+
     apply {
         //apply sketch
         if (hdr.ipv4.isValid() && hdr.tcp.isValid()){
+	    init_tbl.apply();初始化
 	    Calc_hash();//计算hash
 	    read_pagetbl_tbl.apply();//读取地址
-            sketch_count();
+	    transfer_addr_tbl.apply(); //转化地址，获取register访问地址;
+	    operator_tarval_tbl.apply();//获得mask
+	    Update_register_tbl1.apply();//更新寄存器
+	    Update_register_tbl2.apply();
+            Update_register_tbl3.apply();
+            app_pkts_cnt_tbl.apply();//累计hit_cnt；
+	    Load_factor_tbl.apply();//加载负载因子;
+	    read_gmrPointer_tbl.apply();//读取GMR当前的环形执行,得到当前slotID
+	    parti_tbl.apply();//读取空闲分区表
+	    read_slotIDhPos_tbl.apply();
+	   
+	    
+         //   sketch_count();
         }
         forwarding.apply();
     }
