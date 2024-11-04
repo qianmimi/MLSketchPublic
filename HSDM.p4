@@ -11,14 +11,14 @@
 #define slotSize 16384 //2的14次方
 
 header share_metadata_t {
-    bit<8> output_hash_one;
-    bit<8> output_hash_two;
+    bit<32> output_hash_one;
+    bit<32> output_hash_two;
     bit<8> width;
     bit<8> type;
     bit<32> voff;
     bit<16> hoff;
     bit<16> bnum;
-    bit<8> protocol;
+    bit<32> mask;
     bit<1> matchFlag;
     bit<1> hi_Flag;
     bit<1> lo_Flag;
@@ -32,15 +32,6 @@ struct metadata_t {
     share_metadata_t share_metadata;
 };
 
-
-#define SKETCH_REGISTER(num) register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) sketch##num
-
-
-#define SKETCH_COUNT(num, algorithm) hash(meta.index_sketch##num, HashAlgorithm.algorithm, (bit<16>)0, {hdr.ipv4.srcAddr, \
- hdr.ipv4.dstAddr, hdr.tcp.srcPort, hdr.tcp.dstPort, hdr.ipv4.protocol}, (bit<32>)SKETCH_BUCKET_LENGTH);\
- sketch##num.read(meta.value_sketch##num, meta.index_sketch##num); \
- meta.value_sketch##num = meta.value_sketch##num +1; \
- sketch##num.(meta.index_sketch##num, meta.value_sketch##num)
 
 /*************************************************************************
 ************   C H E C K S U M    V E R I F I C A T I O N   *************
@@ -65,23 +56,12 @@ control MyIngress(inout headers hdr,
     register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) slotPointer;
     register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) pageTable;
 
-    SKETCH_REGISTER(0);
-    SKETCH_REGISTER(1);
-    SKETCH_REGISTER(2);
-    //SKETCH_REGISTER(3);
-    //SKETCH_REGISTER(4);
+
 
     action drop() {
         mark_to_drop(standard_metadata);
     }
 
-    action sketch_count(){
-        SKETCH_COUNT(0, crc32_custom);
-        SKETCH_COUNT(1, crc32_custom);
-        SKETCH_COUNT(2, crc32_custom);
-        //SKETCH_COUNT(3, crc32_custom);
-        //SKETCH_COUNT(4, crc32_custom);
-    }
 
    action set_egress_port(bit<9> egress_port){
         standard_metadata.egress_spec = egress_port;
@@ -172,7 +152,7 @@ action Calc_hash(){
         }
     }
    action operator_tarval_act(){ 
-	share_metadata.mask=bit<32>(1<<(32-share_metadata.pval+share_metadata.width_bit));
+	share_metadata.mask=(1<<(32-share_metadata.pval+share_metadata.width_bit));
      }
     table operator_tarval_tbl {
 	//key = {
@@ -189,7 +169,7 @@ action Calc_hash(){
    action Update_register_act1(){
          sketch1.read(share_metadata.value_sketch, share_metadata.paddr);
          share_metadata.value_sketch = share_metadata.value_sketch | share_metadata.mask;
-         sketch1.(share_metadata.paddr, share_metadata.value_sketch);
+         sketch1.write(share_metadata.paddr, share_metadata.value_sketch);
     }
 
     table Update_register_tbl1 {
@@ -206,7 +186,7 @@ action Calc_hash(){
    action Update_register_act2(){
          sketch2.read(share_metadata.value_sketch, share_metadata.paddr);
          share_metadata.value_sketch = share_metadata.value_sketch | share_metadata.mask;
-         sketch2.(share_metadata.paddr,share_metadata.value_sketch);
+         sketch2.write(share_metadata.paddr,share_metadata.value_sketch);
     }
 
     table Update_register_tbl2 {
@@ -224,7 +204,7 @@ action Calc_hash(){
    action Update_register_act3(){
          sketch3.read(share_metadata.value_sketch, share_metadata.paddr);
          share_metadata.value_sketch = share_metadata.value_sketch | share_metadata.mask;
-         sketch3.(share_metadata.paddr,share_metadata.value_sketch);
+         sketch3.write(share_metadata.paddr,share_metadata.value_sketch);
     }
 
     table Update_register_tbl3 {
@@ -243,7 +223,7 @@ action Calc_hash(){
         app_pkts_cnt.read(share_metadata.app_pkts_cnt, share_metadata.app_id);
 	if(share_metadata.value_sketch==0){
 	     share_metadata.app_pkts_cnt = share_metadata.app_pkts_cnt + 1;
-             app_pkts_cnt.(share_metadata.app_id,share_metadata.app_pkts_cnt);
+             app_pkts_cnt.write(share_metadata.app_id,share_metadata.app_pkts_cnt);
 	}
     }
 
@@ -253,7 +233,7 @@ action Calc_hash(){
         }
     }
    action app_reset_hit_num(){
-        app_pkts_cnt.(share_metadata.app_id,0);
+        app_pkts_cnt.write(share_metadata.app_id,0);
     }
 
     table app_reset_hit_tbl {
@@ -326,7 +306,7 @@ action Calc_hash(){
 	share_metadata.slotIDhPos=share_metadata.slotIDhPos+share_metadata.wide;
 	share_metadata.nvoff=share_metadata.voff;
 	share_metadata.nhoff=share_metadata.slotIDhPos;
-	slotPointer.(share_metadata.slotID,share_metadata.slotIDhPos);
+	slotPointer.write(share_metadata.slotID,share_metadata.slotIDhPos);
 	share_metadata.sucess=1;
 	}
     }
