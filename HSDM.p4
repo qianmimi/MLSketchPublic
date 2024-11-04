@@ -14,34 +14,23 @@ const bit<8> RESUB_FL_1  = 1;
 const bit<8> CLONE_FL_1  = 2;
 const bit<8> RECIRC_FL_1 = 3;
 
-header share_metadata_t {
+struct meta_t {
     bit<32> output_hash_one;
     bit<32> output_hash_two;
     bit<8> width;
+    bit<8> width_bit;
     bit<8> type;
     bit<32> voff;
     bit<16> hoff;
     bit<16> bnum;
     bit<32> mask;
-    bit<1> matchFlag;
-    bit<1> hi_Flag;
-    bit<1> lo_Flag;
-    bit<16> delta_lo;
-    bit<32> delta_hi;  
-    bit<1> reg_groupID;
-    bit<4> rsvd;   
-};
-
-header meta_t {
+    bit<32> pval;
     @field_list(CLONE_FL_1)
-    bit<64>  addr;
-    bit<8> app_id;
-}
-
-struct metadata_t {
-    share_metadata_t share_metadata;
-    meta_t meta;
+    bit<64> addr;
+    @field_list(CLONE_FL_1)
+    bit<8> app_id;  
 };
+
 
 
 /*************************************************************************
@@ -90,8 +79,9 @@ control MyIngress(inout headers hdr,
         size = 64;
         default_action = drop;
     }
-   action set_app_para(bit<8> width_bit, bit<8> type, bit<8> app_id){
+   action set_app_para(bit<8> width_bit, bit<8> type, bit<8> app_id,bit<8> width){
         share_metadata.width_bit = width_bit;
+        share_metadata.width = width;
         share_metadata.type = type;
         meta.app_id = app_id;
     }
@@ -126,10 +116,10 @@ action Calc_hash(){
                                                           (bit<32>)SKETCH_BUCKET_LENGTH);
 }
    action read_pagetbl_act(){ //num用幂次方来表示，初始值为0,1,2,3...
-        pageTable.read(meta., meta.app_id);
-	share_metadata.voff=(bit<32>)meta.>>32;
-	share_metadata.hoff=(bit<16>)(meta. >> 16) & 0xffff;
-	share_metadata.bnum=(bit<16>) meta. & 0xffff;
+        pageTable.read(meta.addr, meta.app_id);
+	share_metadata.voff=(bit<32>)meta.addr>>32;
+	share_metadata.hoff=(bit<16>)(meta.addr >> 16) & 0xffff;
+	share_metadata.bnum=(bit<16>) meta.addr & 0xffff;
     }
 
     table read_pagetbl_tbl {
@@ -358,7 +348,7 @@ action Calc_hash(){
     apply {
         //apply sketch，还有旧的hash位置地址还没发给控制器
         if (hdr.ipv4.isValid() && hdr.tcp.isValid()){
-	    init_tbl.apply();初始化
+	    init_tbl.apply();//初始化
 	    Calc_hash();//计算hash
 	    if(standard_metadata.instance_type==0){
 	    read_pagetbl_tbl.apply();//读取地址
@@ -387,14 +377,15 @@ action Calc_hash(){
 
 control MyEgress(inout headers hdr,
                  inout metadata meta,
+                 inout share_metadata,
                  inout standard_metadata_t standard_metadata) {
     apply { 
 	if(standard_metadata.instance_type==0){
             clone_forupdate_tbl.apply();//clone数据包,去更新page table
 	}
 	else{
-	    write_pagetbl_tbl.apply();更新寄存器
-	    app_reset_hit_tbl.apply();重置hit_num
+	    write_pagetbl_tbl.apply();//更新寄存器
+	    app_reset_hit_tbl.apply();//重置hit_num
 
 	}
    }
@@ -404,7 +395,7 @@ control MyEgress(inout headers hdr,
 *************   C H E C K S U M    C O M P U T A T I O N   **************
 *************************************************************************/
 
-control MyComputeChecksum(inout headers hdr, inout metadata meta) {
+control MyComputeChecksum(inout headers hdr, inout metadata meta,inout share_metadata) {
      apply {
     }
 }
