@@ -370,7 +370,7 @@ action Calc_hash(){
 
 
     apply {
-        //apply sketch
+        //apply sketch，还有旧的hash位置地址还没发给控制器
         if (hdr.ipv4.isValid() && hdr.tcp.isValid()){
 	    init_tbl.apply();初始化
 	    Calc_hash();//计算hash
