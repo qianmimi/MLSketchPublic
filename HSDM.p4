@@ -63,7 +63,7 @@ control MyIngress(inout headers hdr,
         size = 64;
         default_action = drop;
     }
-   action set_app_para(bit<16> width_bit, bit<8> type, bit<32> app_id,bit<16> width){
+   action set_app_para(bit<8> width_bit, bit<8> type, bit<32> app_id,bit<16> width){
         meta.width_bit = width_bit;
         meta.width = width;
         meta.type = type;
@@ -120,7 +120,7 @@ action Calc_hash(){
    action transfer_addr_act(){ 
 	meta.stage_ID=meta.hoff>>5+1;
 	meta.paddr=((meta.output_hash_one << meta.bnum) & 0x3FFF) + meta.voff;
-	meta.pval=((meta.output_hash_one << meta.bnum) >> 14)<<meta.width_bit + meta.hoff&31;
+	meta.pval=(bit<8>)((meta.output_hash_one << meta.bnum) >>(bit<8>)14<<meta.width_bit) + (bit<8>)(meta.hoff&(bit<16>)31);
     }
 
   table transfer_addr_tbl {
@@ -129,7 +129,7 @@ action Calc_hash(){
         }
     }
    action operator_tarval_act(){ 
-	meta.mask=(bit<32>)1<<(32-meta.pval+(bit<32>)meta.width_bit);
+	meta.mask=(bit<32>)((bit<8>)1<<((bit<8>)32-meta.pval+meta.width_bit));
      }
     table operator_tarval_tbl {
 	//key = {
