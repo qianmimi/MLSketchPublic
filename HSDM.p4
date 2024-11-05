@@ -144,8 +144,8 @@ action Calc_hash(){
      //   default_action = drop;
     }
    action Update_register_act1(){
-         sketch1.read(meta.value_sketch, meta.paddr);
-         meta.value_sketch = meta.value_sketch | meta.mask;
+         sketch1.read(meta.org_value_sketch, meta.paddr);
+         meta.value_sketch = meta.org_value_sketch | meta.mask;
          sketch1.write(meta.paddr, meta.value_sketch);
     }
 
@@ -161,8 +161,8 @@ action Calc_hash(){
         default_action = NoAction;
     }
    action Update_register_act2(){
-         sketch2.read(meta.value_sketch, meta.paddr);
-         meta.value_sketch = meta.value_sketch | meta.mask;
+         sketch2.read(meta.org_value_sketch, meta.paddr);
+         meta.value_sketch = meta.org_value_sketch | meta.mask;
          sketch2.write(meta.paddr,meta.value_sketch);
     }
 
@@ -179,8 +179,8 @@ action Calc_hash(){
     }
 
    action Update_register_act3(){
-         sketch3.read(meta.value_sketch, meta.paddr);
-         meta.value_sketch = meta.value_sketch |meta.mask;
+         sketch3.read(meta.org_value_sketch, meta.paddr);
+         meta.value_sketch = meta.org_value_sketch |meta.mask;
          sketch3.write(meta.paddr,meta.value_sketch);
     }
 
@@ -209,7 +209,7 @@ action Calc_hash(){
 
     table app_pkts_cnt_tbl {
      key = {
-            meta.value_sketch: exact;
+            meta.org_value_sketch: exact;
       }
         actions = {
             app_rpkts_cnt_num;
