@@ -58,27 +58,31 @@ header tcp_t{
 struct metadata {
     bit<32> output_hash_one;
     bit<32> output_hash_two;
-    bit<8> width;
+    bit<16> width;
     bit<8> width_bit;
     bit<8> type;
     bit<32> voff;
     bit<16> hoff;
-    bit<16> read_slotIDhPos;
-    bit<16> bnum;
+    bit<32> nvoff;
+    bit<16> nhoff;
+    bit<16> slotIDhPos;
+    bit<8> bnum;
     bit<32> mask;
-    bit<32> pval;
+    bit<8> pval;
     bit<32> paddr;
     bit<16> stage_ID;
     bit<32> value_sketch;
+    bit<32> org_value_sketch;
     bit<32> app_pkts_cnt;
-    bit<8> slot_ID;
+    bit<16> slotID;
     bit<1> allocFlag;
     bit<16> hstart;
     bit<16> hend;
     @field_list(CLONE_FL_1)
     bit<64> addr;
     @field_list(CLONE_FL_1)
-    bit<32> app_id;  
+    bit<32> app_id; 
+    bit<1> sucess; 
 }
 
 struct headers {
