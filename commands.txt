@@ -1,0 +1,15 @@
+table_add forwarding set_egress_port 1 => 2
+table_add forwarding set_egress_port 2 => 1
+table_add init_tbl set_app_para 1 => 4 1 1 16
+table_add Update_register_tbl1 Update_register_act1 1 =>
+table_add Update_register_tbl2 Update_register_act2 2 =>
+table_add Update_register_tbl3 Update_register_act3 3 =>
+table_add app_pkts_cnt_tbl app_rpkts_cnt_num 1 =>
+table_add app_pkts_cnt_tbl app_rwpkts_cnt_num 0 =>
+table_add Load_factor_tbl load_factor_act1 1 0->7 => 1
+table_add Load_factor_tbl load_factor_act0 1 7->10 => 2
+table_add parti_tbl set_partition_block 0 => 0 127 0
+table_add parti_tbl set_partition_block 1 => 0 127 16
+table_add read_slotIDhPos_tbl allocread_slotIDhPos 1 =>
+table_add write_slotIDhPos_tbl allocwrite_slotIDhPos 1 =>
+table_add clone_forupdate_tbl clone_forupdate_act 1 =>
