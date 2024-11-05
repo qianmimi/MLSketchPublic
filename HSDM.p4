@@ -103,7 +103,7 @@ action Calc_hash(){
         pageTable.read(meta.addr, meta.app_id);
 	meta.voff=(bit<32>)(meta.addr>>32);
 	meta.hoff=(bit<16>)((meta.addr >> 16) & 0xffff);
-	meta.bnum=(bit<16>)(meta.addr & 0xffff);
+	meta.bnum=(bit<8>)(meta.addr & 0xffff);
     }
 
     table read_pagetbl_tbl {
@@ -196,18 +196,28 @@ action Calc_hash(){
         default_action = NoAction;
     }
 
-   action app_pkts_cnt_num(){
+   action app_rpkts_cnt_num(){
         app_pkts_cnt.read(meta.app_pkts_cnt, meta.app_id);
-	if(meta.value_sketch==0){
+    }
+   action app_rwpkts_cnt_num(){
+        app_pkts_cnt.read(meta.app_pkts_cnt, meta.app_id);
+	//if(meta.value_sketch==0){
 	     meta.app_pkts_cnt = meta.app_pkts_cnt + 1;
              app_pkts_cnt.write(meta.app_id,meta.app_pkts_cnt);
-	}
+	//}
     }
 
     table app_pkts_cnt_tbl {
+     key = {
+            meta.value_sketch: exact;
+      }
         actions = {
-            app_pkts_cnt_num;
+            app_rpkts_cnt_num;
+            app_rwpkts_cnt_num;
+            NoAction;
         }
+         size = 64;
+        default_action = NoAction;  
     }
 
    action load_factor_act1(){
@@ -267,18 +277,12 @@ action Calc_hash(){
         default_action = NoAction;
     }
 
-   action allocsuc_slotIDhPos(){
+   action allocread_slotIDhPos(){
 	//slotIDhPos<=hend-wide
         slotPointer.read(meta.slotIDhPos, (bit<32>)meta.slotID);
-	if(meta.slotIDhPos+meta.width<meta.hend){
-	meta.slotIDhPos=meta.slotIDhPos+meta.width;
-	meta.nvoff=meta.voff;
-	meta.nhoff=meta.slotIDhPos;
-	slotPointer.write(meta.slotID,meta.slotIDhPos);
-	meta.sucess=1;
-	}
-    }
 
+    }
+  
     table read_slotIDhPos_tbl {
         key = {
 	    meta.allocFlag: exact;
@@ -287,14 +291,39 @@ action Calc_hash(){
 	    
         }
         actions = {
-            allocsuc_slotIDhPos;
+            allocread_slotIDhPos;
             NoAction;
         }
         size = 64;
         default_action = NoAction;
     }
+    action allocwrite_slotIDhPos(){
+	//slotIDhPos<=hend-wide
+	meta.slotIDhPos=meta.slotIDhPos+meta.width;
+	meta.nvoff=meta.voff;
+	meta.nhoff=meta.slotIDhPos;
+	slotPointer.write((bit<32>)meta.slotID,meta.slotIDhPos);
+	meta.sucess=1;
+    }
+  
+    table write_slotIDhPos_tbl {
+        key = {
+	    meta.allocFlag: exact;
+	    meta.hend: exact;//这个end，由于每个空闲分区表都知道它的end
+	    meta.width:exact;//1，8，16，32
+	    
+        }
+        actions = {
+            allocwrite_slotIDhPos;
+            NoAction;
+        }
+        size = 64;
+        default_action = NoAction;
+    }
+    
+    
     action clone_forupdate_act(){
-	meta.addr=(meta.nvoff<<32)| (meta.nhoff<<16) | (meta.bnum<<1);
+	meta.addr=((bit<64>)meta.nvoff<<32)| ((bit<64>)meta.nhoff<<16) | ((bit<64>)meta.bnum<<1);
 	clone_preserving_field_list(CloneType.I2E, 5, CLONE_FL_1);
     }
 
@@ -318,7 +347,7 @@ action Calc_hash(){
             write_pagetbl_act;
         }
     }
-       action app_reset_hit_num(){
+    action app_reset_hit_num(){
         app_pkts_cnt.write(meta.app_id,0);
     }
 
@@ -345,6 +374,9 @@ action Calc_hash(){
 	    read_gmrPointer_tbl.apply();//读取GMR当前的环形执行,得到当前slotID
 	    parti_tbl.apply();//读取空闲分区表
 	    read_slotIDhPos_tbl.apply();//分配
+	    if(meta.slotIDhPos+meta.width<meta.hend){
+		 write_slotIDhPos_tbl.apply();
+            }
 	    clone_forupdate_tbl.apply();//clone数据包,去更新page table
 	  }
 	  else{
