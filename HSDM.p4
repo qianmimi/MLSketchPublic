@@ -120,7 +120,7 @@ action Calc_hash(){
    action transfer_addr_act(){ 
 	meta.stage_ID=meta.hoff>>5+1;
 	meta.paddr=((meta.output_hash_one << meta.bnum) & 0x3FFF) + meta.voff;
-	meta.pval=(bit<8>)((meta.output_hash_one << meta.bnum) >>(bit<8>)14<<meta.width_bit) + (bit<8>)(meta.hoff&(bit<16>)31);
+	meta.pval=(bit<8>)((meta.output_hash_one << meta.bnum) >>14<<meta.width_bit) + (bit<8>)(meta.hoff&31);
     }
 
   table transfer_addr_tbl {
@@ -129,7 +129,7 @@ action Calc_hash(){
         }
     }
    action operator_tarval_act(){ 
-	meta.mask=(bit<32>)((bit<8>)1<<((bit<8>)32-meta.pval+meta.width_bit));
+	meta.mask=(bit<32>)1<<((bit<8>)32-meta.pval+meta.width_bit);
      }
     table operator_tarval_tbl {
 	//key = {
