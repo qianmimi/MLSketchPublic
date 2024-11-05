@@ -120,7 +120,7 @@ action Calc_hash(){
    action transfer_addr_act(){ 
 	meta.stage_ID=meta.hoff>>5+1;
 	meta.paddr=((meta.output_hash_one << meta.bnum) & 0x3FFF) + meta.voff;
-	meta.pval=((meta.output_hash_one << meta.bnum) << 14)>>meta.width_bit + meta.hoff&31;
+	meta.pval=((meta.output_hash_one << meta.bnum) >> 14)<<meta.width_bit + meta.hoff&31;
     }
 
   table transfer_addr_tbl {
