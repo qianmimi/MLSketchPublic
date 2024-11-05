@@ -68,7 +68,7 @@ struct metadata {
     bit<32> mask;
     bit<32> pval;
     bit<32> paddr;
-    bit<16> stageID;
+    bit<16> stage_ID;
     bit<32> value_sketch;
     bit<32> app_pkts_cnt;
     bit<8> slot_ID;
