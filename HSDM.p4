@@ -232,7 +232,7 @@ action Calc_hash(){
     }
 
    action read_gmrPointer(){
-        gmrPointer.read(meta.slotID, 0);
+        gmrPointer.read(meta.slotID, (bit<32>)0);
 	meta.slotID=meta.slotID+1;
         gmrPointer.write(0, meta.slotID);
     }
@@ -269,9 +269,9 @@ action Calc_hash(){
 
    action allocsuc_slotIDhPos(){
 	//slotIDhPos<=hend-wide
-        slotPointer.read(meta.slotIDhPos, meta.slotID);
-	if(meta.slotIDhPos+meta.wide<meta.hend){
-	meta.slotIDhPos=meta.slotIDhPos+meta.wide;
+        slotPointer.read(meta.slotIDhPos, (bit<32>)meta.slotID);
+	if(meta.slotIDhPos+meta.width<meta.hend){
+	meta.slotIDhPos=meta.slotIDhPos+meta.width;
 	meta.nvoff=meta.voff;
 	meta.nhoff=meta.slotIDhPos;
 	slotPointer.write(meta.slotID,meta.slotIDhPos);
@@ -283,7 +283,7 @@ action Calc_hash(){
         key = {
 	    meta.allocFlag: exact;
 	    meta.hend: exact;//这个end，由于每个空闲分区表都知道它的end
-	    meta.wide:exact;//1，8，16，32
+	    meta.width:exact;//1，8，16，32
 	    
         }
         actions = {
