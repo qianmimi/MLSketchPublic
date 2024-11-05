@@ -7,7 +7,7 @@
 
 /* CONSTANTS */
 #define SKETCH_BUCKET_LENGTH 28
-#define SKETCH_CELL_BIT_WIDTH 64
+#define SKETCH_CELL_BIT_WIDTH 32
 #define slotSize 16384 //2的14次方
 
 
@@ -32,9 +32,9 @@ control MyIngress(inout headers hdr,
     register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) app_pkts_cnt;
     register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) app_pkts_total_cnt;
     register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) app_miss_cnt;
-    register<bit<SKETCH_CELL_BIT_WIDTH>>(1) gmrPointer;
-    register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) slotPointer;
-    register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) pageTable;
+    register<bit<16>>(1) gmrPointer;
+    register<bit<16>>(SKETCH_BUCKET_LENGTH) slotPointer;
+    register<bit<64>>(SKETCH_BUCKET_LENGTH) pageTable;
     register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) sketch1;
     register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) sketch2;
     register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) sketch3;
@@ -63,7 +63,7 @@ control MyIngress(inout headers hdr,
         size = 64;
         default_action = drop;
     }
-   action set_app_para(bit<16> width_bit, bit<8> type, bit<32> app_id,bit<8> width){
+   action set_app_para(bit<16> width_bit, bit<8> type, bit<32> app_id,bit<16> width){
         meta.width_bit = width_bit;
         meta.width = width;
         meta.type = type;
@@ -118,7 +118,7 @@ action Calc_hash(){
 //转换，stageID=hoff>>5+1; pa=(h(*)<<bnum)%16384+voff; pval=(h(*)<<bnum)/16384*widthbit+hoff%b
 
    action transfer_addr_act(){ 
-	meta.stageID=meta.hoff>>5+1;
+	meta.stage_ID=meta.hoff>>5+1;
 	meta.paddr=((meta.output_hash_one << meta.bnum) & 0x3FFF) + meta.voff;
 	meta.pval=((meta.output_hash_one << meta.bnum) << 14)>>meta.width_bit + meta.hoff&31;
     }
@@ -129,7 +129,7 @@ action Calc_hash(){
         }
     }
    action operator_tarval_act(){ 
-	meta.mask=(1<<(32-meta.pval+meta.width_bit));
+	meta.mask=(bit<32>)1<<(32-meta.pval+(bit<32>)meta.width_bit);
      }
     table operator_tarval_tbl {
 	//key = {
@@ -151,7 +151,7 @@ action Calc_hash(){
 
     table Update_register_tbl1 {
         key = {
-            standard_metadata.stage_ID: exact; //不同的ingress_port对应不同的app_id
+            meta.stage_ID: exact; //不同的ingress_port对应不同的app_id
         }
         actions = {
             Update_register_act1;
@@ -168,7 +168,7 @@ action Calc_hash(){
 
     table Update_register_tbl2 {
         key = {
-            standard_metadata.stage_ID: exact; //不同的ingress_port对应不同的app_id
+            meta.stage_ID: exact; //不同的ingress_port对应不同的app_id
         }
         actions = {
             Update_register_act2;
@@ -180,13 +180,13 @@ action Calc_hash(){
 
    action Update_register_act3(){
          sketch3.read(meta.value_sketch, meta.paddr);
-         meta.value_sketch = meta.value_sketch | meta.mask;
+         meta.value_sketch = meta.value_sketch |meta.mask;
          sketch3.write(meta.paddr,meta.value_sketch);
     }
 
     table Update_register_tbl3 {
         key = {
-            standard_metadata.stage_ID: exact; //不同的ingress_port对应不同的app_id
+            meta.stage_ID: exact; //不同的ingress_port对应不同的app_id
         }
         actions = {
             Update_register_act3;
@@ -234,7 +234,7 @@ action Calc_hash(){
    action read_gmrPointer(){
         gmrPointer.read(meta.slotID, 0);
 	meta.slotID=meta.slotID+1;
-        gmrPointer.read(0, meta.slotID);
+        gmrPointer.write(0, meta.slotID);
     }
 
     table read_gmrPointer_tbl {
@@ -248,7 +248,7 @@ action Calc_hash(){
         size = 64;
         default_action = NoAction;
     }
-   action set_partition_block(bit<8> hstart, bit<8> hend, bit<32> voff){
+   action set_partition_block(bit<16> hstart, bit<16> hend, bit<32> voff){
         meta.hstart = hstart;
         meta.hend = hend;
         meta.voff = voff;
@@ -256,7 +256,7 @@ action Calc_hash(){
 
     table parti_tbl {
         key = {
-            standard_metadata.slotID: exact; 
+            meta.slotID: exact; 
 	    meta.allocFlag: exact;
         }
         actions = {
