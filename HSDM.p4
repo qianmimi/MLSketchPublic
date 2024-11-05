@@ -284,18 +284,18 @@ action Calc_hash(){
     }
   
     table read_slotIDhPos_tbl {
-        key = {
-	    meta.allocFlag: exact;
-	    meta.hend: exact;//这个end，由于每个空闲分区表都知道它的end
-	    meta.width:exact;//1，8，16，32
+      //  key = {
+	//    meta.allocFlag: exact;
+	 //   meta.hend: exact;//这个end，由于每个空闲分区表都知道它的end
+	  //  meta.width:exact;//1，8，16，32
 	    
-        }
+      //  }
         actions = {
             allocread_slotIDhPos;
-            NoAction;
+        //    NoAction;
         }
-        size = 64;
-        default_action = NoAction;
+      //  size = 64;
+       // default_action = NoAction;
     }
     action allocwrite_slotIDhPos(){
 	//slotIDhPos<=hend-wide
@@ -307,18 +307,18 @@ action Calc_hash(){
     }
   
     table write_slotIDhPos_tbl {
-        key = {
-	    meta.allocFlag: exact;
-	    meta.hend: exact;//这个end，由于每个空闲分区表都知道它的end
-	    meta.width:exact;//1，8，16，32
+     //   key = {
+	//    meta.allocFlag: exact;
+	//    meta.hend: exact;//这个end，由于每个空闲分区表都知道它的end
+	 //   meta.width:exact;//1，8，16，32
 	    
-        }
+       // }
         actions = {
             allocwrite_slotIDhPos;
-            NoAction;
+        //    NoAction;
         }
-        size = 64;
-        default_action = NoAction;
+      //  size = 64;
+       // default_action = NoAction;
     }
     
     
@@ -338,7 +338,7 @@ action Calc_hash(){
         size = 64;
         default_action = NoAction;
     }
-       action write_pagetbl_act(){ //num用幂次方来表示，初始值为0,1,2,3...
+    action write_pagetbl_act(){ //num用幂次方来表示，初始值为0,1,2,3...
         pageTable.write(meta.app_id,meta.addr);
     }
 
