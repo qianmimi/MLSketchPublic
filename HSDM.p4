@@ -7,8 +7,9 @@
 
 /* CONSTANTS */
 #define SKETCH_BUCKET_LENGTH 28
+#define SKETCH_BUCKET_TOTAL_LENGTH 655360
 #define SKETCH_CELL_BIT_WIDTH 32
-#define slotSize 16384 //2的14次方
+#define slotSize 65536 //2的16次方
 
 
 
@@ -30,14 +31,14 @@ control MyIngress(inout headers hdr,
                   inout standard_metadata_t standard_metadata) {
 
     register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) app_pkts_cnt;
-    register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) app_pkts_total_cnt;
-    register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) app_miss_cnt;
+   // register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) app_pkts_total_cnt;
+    //register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) app_miss_cnt;
     register<bit<16>>(1) gmrPointer;
     register<bit<16>>(SKETCH_BUCKET_LENGTH) slotPointer;
     register<bit<64>>(SKETCH_BUCKET_LENGTH) pageTable;
-    register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) sketch1;
-    register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) sketch2;
-    register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_LENGTH) sketch3;
+    register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_TOTAL_LENGTH) sketch1;
+    register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_TOTAL_LENGTH) sketch2;
+    register<bit<SKETCH_CELL_BIT_WIDTH>>(SKETCH_BUCKET_TOTAL_LENGTH) sketch3;
 
 
 
@@ -57,11 +58,10 @@ control MyIngress(inout headers hdr,
         }
         actions = {
             set_egress_port;
-            drop;
             NoAction;
         }
         size = 64;
-        default_action = drop;
+        default_action = NoAction;
     }
    action set_app_para(bit<8> width_bit, bit<8> type, bit<32> app_id,bit<16> width){
         meta.width_bit = width_bit;
@@ -120,7 +120,7 @@ action Calc_hash(){
    action transfer_addr_act(){ 
 	meta.stage_ID=meta.hoff>>5+1;
 	meta.paddr=((meta.output_hash_one << meta.bnum) & 0x3FFF) + meta.voff;
-	meta.pval=(bit<8>)((meta.output_hash_one << meta.bnum) >>14<<meta.width_bit) + (bit<8>)(meta.hoff&31);
+	meta.pval=(bit<8>)((meta.output_hash_one << meta.bnum) >>16<<meta.width_bit) + (bit<8>)(meta.hoff&31);
     }
 
   table transfer_addr_tbl {
@@ -267,7 +267,6 @@ action Calc_hash(){
     table parti_tbl {
         key = {
             meta.slotID: exact; 
-	    meta.allocFlag: exact;
         }
         actions = {
             set_partition_block;
@@ -284,18 +283,18 @@ action Calc_hash(){
     }
   
     table read_slotIDhPos_tbl {
-      //  key = {
-	//    meta.allocFlag: exact;
+        key = {
+	    meta.allocFlag: exact;
 	 //   meta.hend: exact;//这个end，由于每个空闲分区表都知道它的end
 	  //  meta.width:exact;//1，8，16，32
 	    
-      //  }
+        }
         actions = {
             allocread_slotIDhPos;
-        //    NoAction;
+            NoAction;
         }
-      //  size = 64;
-       // default_action = NoAction;
+        size = 64;
+        default_action = NoAction;
     }
     action allocwrite_slotIDhPos(){
 	//slotIDhPos<=hend-wide
@@ -307,18 +306,18 @@ action Calc_hash(){
     }
   
     table write_slotIDhPos_tbl {
-     //   key = {
-	//    meta.allocFlag: exact;
+        key = {
+	    meta.allocFlag: exact;
 	//    meta.hend: exact;//这个end，由于每个空闲分区表都知道它的end
 	 //   meta.width:exact;//1，8，16，32
 	    
-       // }
+        }
         actions = {
             allocwrite_slotIDhPos;
-        //    NoAction;
+            NoAction;
         }
-      //  size = 64;
-       // default_action = NoAction;
+        size = 64;
+        default_action = NoAction;
     }
     
     
