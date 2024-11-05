@@ -7,9 +7,9 @@
 
 /* CONSTANTS */
 #define SKETCH_BUCKET_LENGTH 28
-#define SKETCH_BUCKET_TOTAL_LENGTH 655360
+#define SKETCH_BUCKET_TOTAL_LENGTH 16
 #define SKETCH_CELL_BIT_WIDTH 32
-#define slotSize 65536 //2的16次方
+#define slotSize 16 //2的16次方
 
 
 
@@ -322,7 +322,7 @@ action Calc_hash(){
     
     
     action clone_forupdate_act(){
-	meta.addr=((bit<64>)meta.nvoff<<32)| ((bit<64>)meta.nhoff<<16) | ((bit<64>)meta.bnum<<1);
+	meta.addr=((bit<64>)meta.nvoff<<32)| ((bit<64>)meta.nhoff<<4) | ((bit<64>)meta.bnum<<1);
 	clone_preserving_field_list(CloneType.I2E, 5, CLONE_FL_1);
     }
 
