@@ -6,7 +6,7 @@
 #include "include/parsers.p4"
 
 /* CONSTANTS */
-#define SKETCH_BUCKET_LENGTH 28
+#define SKETCH_BUCKET_LENGTH 16
 #define SKETCH_BUCKET_TOTAL_LENGTH 16
 #define SKETCH_CELL_BIT_WIDTH 32
 #define slotSize 16 //2的16次方
