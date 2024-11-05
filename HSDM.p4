@@ -6,8 +6,8 @@
 #include "include/parsers.p4"
 
 /* CONSTANTS */
-#define SKETCH_BUCKET_LENGTH 16
-#define SKETCH_BUCKET_TOTAL_LENGTH 16
+#define SKETCH_BUCKET_LENGTH 28
+#define SKETCH_BUCKET_TOTAL_LENGTH 32
 #define SKETCH_CELL_BIT_WIDTH 32
 #define slotSize 16 //2的16次方
 
@@ -202,8 +202,8 @@ action Calc_hash(){
    action app_rwpkts_cnt_num(){
         app_pkts_cnt.read(meta.app_pkts_cnt, meta.app_id);
 	//if(meta.value_sketch==0){
-	     meta.app_pkts_cnt = meta.app_pkts_cnt + 1;
-             app_pkts_cnt.write(meta.app_id,meta.app_pkts_cnt);
+	meta.app_pkts_cnt = meta.app_pkts_cnt + 1;
+        app_pkts_cnt.write(meta.app_id,meta.app_pkts_cnt);
 	//}
     }
 
