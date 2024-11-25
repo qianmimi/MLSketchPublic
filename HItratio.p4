@@ -20,7 +20,7 @@
 #define store_srccnt_REGISTER(num,length) register<bit<SKETCH_CELL_BIT_WIDTH>>(length) store_srccnt##num
 #define pkt_REGISTER(num) register<bit<SKETCH_CELL_BIT_WIDTH>>(8) pkt##num
 
-
+/*for hh*/
  
  #define Action_src_hash(num,algorithm,length)  \
         action SKETCH_src_hash##num() { \
@@ -42,6 +42,29 @@
        action SKETCH_srccnt_reset##num() { \
        store_srccnt##num.write(meta.index_src##num,0); \
  }
+
+/*ip-pir*/
+ #define Action_ip_hash(num,algorithm,length)  \
+        action SKETCH_ip_hash##num() { \
+         hash(meta.index_ip##num, HashAlgorithm.algorithm, (bit<16>)0, {hdr.ipv4.srcAddr,hdr.ipv4.dstAddr}, (bit<32>)length);\
+}
+ 
+ #define Action_ipkey_rw(num) \
+       action SKETCH_ip_rw##num() { \
+       store_srckey##num.read(meta.srckey##num, meta.index_src##num); \
+       store_srckey##num.write(meta.index_src##num,hdr.ipv4.srcAddr); \
+ }
+
+ #define Action_srccnt_incr(num) \
+       action SKETCH_srccnt_incr##num() { \
+       store_srccnt##num.read(meta.srccnt##num, meta.index_src##num); \
+       store_srccnt##num.write(meta.index_src##num,meta.srccnt##num+1); \
+ }
+ #define Action_srccnt_reset(num) \
+       action SKETCH_srccnt_reset##num() { \
+       store_srccnt##num.write(meta.index_src##num,0); \
+ }
+
  
 #define Action_pkt_hit(num) \
         action app_pkt_hit##num(){\
