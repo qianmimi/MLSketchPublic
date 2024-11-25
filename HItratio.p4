@@ -69,6 +69,23 @@
        pkt_hit##num.write(appid,meta.hit_cnt##num+1); \
  }
 
+//for turboflow
+ #define Action_tuple_hash(num,algorithm,length)  \
+         action SKETCH_tuple_hash##num() { \
+         hash(meta.index_tuple##num, HashAlgorithm.algorithm, (bit<16>)0, {hdr.ipv4.srcAddr, \
+ hdr.ipv4.dstAddr, hdr.tcp.srcPort, hdr.tcp.dstPort, hdr.ipv4.protocol}, (bit<32>)length);\
+ }
+ #define Action_tuple_src_rw(num) \
+       action SKETCH_tuple_src_rw##num() { \
+       store_tuple_srckey##num.read(meta.tuplekey_src##num, meta.index_tuple##num); \
+       store_tuple_srckey##num.write(meta.index_tuple##num, hdr.ipv4.srcAddr); \
+ }
+ #define Action_tuple_dst_rw(num) \
+       action SKETCH_tuple_dst_rw##num() { \
+       store_tuple_dstkey##num.read(meta.tuplekey_dst##num, meta.index_tuple##num); \
+       store_tuple_dstkey##num.write(meta.index_tuple##num, hdr.ipv4.dstAddr); \
+ }
+
    
 
 
@@ -105,6 +122,8 @@ control MyIngress(inout headers hdr,
     Action_pkt_hit(1,2)
 
 
+//for turblflow
+
 
     action app_total_pkt(){
         total_pkts.read(meta.app_pkts_total, 0);
@@ -139,7 +158,7 @@ control MyIngress(inout headers hdr,
            SKETCH_src_rw0()
            if(meta.srckey0==hdr.ipv4.srcAddr || meta.srckey0==0){
                 SKETCH_srccnt_incr(0)
-                app_pkt_hit(0)
+                app_pkt_hit0
            }
            else{
                 SKETCH_srccnt_reset(0)
@@ -150,11 +169,11 @@ control MyIngress(inout headers hdr,
           SKETCH_ip_src_rw(0)
           SKETCH_ip_dst_rw(0)
           if((meta.ipkey_src0==hdr.ipv4.srcAddr && meta.ipkey_dst0==hdr.ipv4.dstAddr) && ( meta.ipkey_src0==0 && meta.ipkey_dst0==0)){
-              app_pkt_hit(1);
+              app_pkt_hit1
           }
 
          //for turboflow
-
+          
 
 
 
