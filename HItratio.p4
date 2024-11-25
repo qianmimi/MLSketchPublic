@@ -23,6 +23,13 @@
 #define store_ip_src_REGISTER(num,length) register<bit<SKETCH_CELL_BIT_WIDTH>>(length) store_ip_srckey##num
 #define store_ip_dst_REGISTER(num,length) register<bit<SKETCH_CELL_BIT_WIDTH>>(length) store_ip_dstkey##num
 
+#define store_tuple_src_REGISTER(num,length) register<bit<SKETCH_CELL_BIT_WIDTH>>(length) store_tuple_srckey##num
+#define store_tuple_dst_REGISTER(num,length) register<bit<SKETCH_CELL_BIT_WIDTH>>(length) store_tuple_dstkey##num
+#define store_tuple_srcport_REGISTER(num,length) register<bit<SKETCH_CELL_BIT_WIDTH>>(length) store_tuple_dstportkey##num
+#define store_tuple_dstport_REGISTER(num,length) register<bit<SKETCH_CELL_BIT_WIDTH>>(length) store_tuple_dstportkey##num
+
+
+
 /*for hh*/
  
  #define Action_src_hash(num,algorithm,length)  \
@@ -62,13 +69,6 @@
        store_ip_dstkey##num.write(meta.index_ip##num, hdr.ipv4.dstAddr); \
  }
 
-
- #define Action_pkt_hit(num,appid) \
-       action app_pkt_hit##num() { \
-       pkt_hit##num.read(meta.hit_cnt##num, appid); \
-       pkt_hit##num.write(appid,meta.hit_cnt##num+1); \
- }
-
 //for turboflow
  #define Action_tuple_hash(num,algorithm,length)  \
          action SKETCH_tuple_hash##num() { \
@@ -84,6 +84,22 @@
        action SKETCH_tuple_dst_rw##num() { \
        store_tuple_dstkey##num.read(meta.tuplekey_dst##num, meta.index_tuple##num); \
        store_tuple_dstkey##num.write(meta.index_tuple##num, hdr.ipv4.dstAddr); \
+ }
+ #define Action_tuple_srcport_rw(num) \
+       action SKETCH_tuple_srcport_rw##num() { \
+       store_tuple_srcportkey##num.read(meta.tuplekey_srcport##num, meta.index_tuple##num); \
+       store_tuple_srcportkey##num.write(meta.index_tuple##num, hdr.tcp.srcPort); \
+ }
+ #define Action_tuple_dstport_rw(num) \
+       action SKETCH_tuple_dstport_rw##num() { \
+       store_tuple_dstportkey##num.read(meta.tuplekey_dst##num, meta.index_tuple##num); \
+       store_tuple_dstportkey##num.write(meta.index_tuple##num, hdr.tcp.dstPort); \
+ }
+
+ #define Action_pkt_hit(num,appid) \
+       action app_pkt_hit##num() { \
+       pkt_hit##num.read(meta.hit_cnt##num, appid); \
+       pkt_hit##num.write(appid,meta.hit_cnt##num+1); \
  }
 
    
@@ -123,6 +139,15 @@ control MyIngress(inout headers hdr,
 
 
 //for turblflow
+   Action_tuple_hash(0)
+   Action_tuple_src_rw(0)
+   Action_tuple_dst_rw(0)
+   Action_tuple_srcport_rw(0)
+   Action_tuple_dstport_rw(0)
+   Action_pkt_hit(2,3)
+
+
+
 
 
     action app_total_pkt(){
