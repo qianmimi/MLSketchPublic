@@ -18,7 +18,10 @@
 
 #define store_srckey_REGISTER(num,length) register<bit<SKETCH_CELL_BIT_WIDTH>>(length) store_srckey##num
 #define store_srccnt_REGISTER(num,length) register<bit<SKETCH_CELL_BIT_WIDTH>>(length) store_srccnt##num
-#define pkt_REGISTER(num) register<bit<SKETCH_CELL_BIT_WIDTH>>(8) pkt##num
+#define pkt_REGISTER(num) register<bit<SKETCH_CELL_BIT_WIDTH>>(8) pkt_hit##num
+
+#define store_ip_src_REGISTER(num,length) register<bit<SKETCH_CELL_BIT_WIDTH>>(length) store_ip_srckey##num
+#define store_ip_dst_REGISTER(num,length) register<bit<SKETCH_CELL_BIT_WIDTH>>(length) store_ip_dstkey##num
 
 /*for hh*/
  
@@ -45,32 +48,26 @@
 
 /*ip-pir*/
  #define Action_ip_hash(num,algorithm,length)  \
-        action SKETCH_ip_hash##num() { \
+         action SKETCH_ip_hash##num() { \
          hash(meta.index_ip##num, HashAlgorithm.algorithm, (bit<16>)0, {hdr.ipv4.srcAddr,hdr.ipv4.dstAddr}, (bit<32>)length);\
-}
- 
- #define Action_ipkey_rw(num) \
-       action SKETCH_ip_rw##num() { \
-       store_srckey##num.read(meta.srckey##num, meta.index_src##num); \
-       store_srckey##num.write(meta.index_src##num,hdr.ipv4.srcAddr); \
+ }
+ #define Action_ip_src_rw(num) \
+       action SKETCH_ip_src_rw##num() { \
+       store_ip_srckey##num.read(meta.ipkey_src##num, meta.index_ip##num); \
+       store_ip_srckey##num.write(meta.index_ip##num, hdr.ipv4.srcAddr); \
+ }
+ #define Action_ip_dst_rw(num) \
+       action SKETCH_ip_dst_rw##num() { \
+       store_ip_dstkey##num.read(meta.ipkey_dst##num, meta.index_ip##num); \
+       store_ip_dstkey##num.write(meta.index_ip##num, hdr.ipv4.dstAddr); \
  }
 
- #define Action_srccnt_incr(num) \
-       action SKETCH_srccnt_incr##num() { \
-       store_srccnt##num.read(meta.srccnt##num, meta.index_src##num); \
-       store_srccnt##num.write(meta.index_src##num,meta.srccnt##num+1); \
- }
- #define Action_srccnt_reset(num) \
-       action SKETCH_srccnt_reset##num() { \
-       store_srccnt##num.write(meta.index_src##num,0); \
- }
 
- 
-#define Action_pkt_hit(num) \
-        action app_pkt_hit##num(){\
-        pkt##num.read(meta.app_pkts_hit##num, meta.app_id);\
-        pkt##num.write(meta.app_id,meta.app_pkts_hit##num+1);\
-    }
+ #define Action_pkt_hit(num,appid) \
+       action app_pkt_hit##num() { \
+       pkt_hit##num.read(meta.hit_cnt##num, appid); \
+       pkt_hit##num.write(appid,meta.hit_cnt##num+1); \
+ }
 
    
 
@@ -98,7 +95,15 @@ control MyIngress(inout headers hdr,
     Action_srckey_rw(0)
     Action_srccnt_incr(0)
     Action_srccnt_reset(0)
-    Action_pkt_hit(0)
+    Action_pkt_hit(0,1)
+     
+
+  //for ip-pair
+    Action_ip_hash(0)
+    store_ip_dst_REGISTER(0)
+    store_ip_src_REGISTER(0)
+    Action_pkt_hit(1,2)
+
 
 
     action app_total_pkt(){
@@ -130,16 +135,32 @@ control MyIngress(inout headers hdr,
     apply {
         //apply sketch
         if (hdr.ipv4.isValid() && hdr.tcp.isValid()){
-           SKETCH_src_hash0();
+           SKETCH_src_hash0()
+           SKETCH_src_rw0()
            if(meta.srckey0==hdr.ipv4.srcAddr || meta.srckey0==0){
-                SKETCH_srccnt_incr(0);
-                app_pkt_hit(0);
+                SKETCH_srccnt_incr(0)
+                app_pkt_hit(0)
            }
            else{
-                SKETCH_srccnt_reset(0);
-           }
-           app_total_pkt();    
+                SKETCH_srccnt_reset(0)
+           }   
         }
+          //for ip-pair 
+          SKETCH_ip_hash0()
+          SKETCH_ip_src_rw(0)
+          SKETCH_ip_dst_rw(0)
+          if((meta.ipkey_src0==hdr.ipv4.srcAddr && meta.ipkey_dst0==hdr.ipv4.dstAddr) && ( meta.ipkey_src0==0 && meta.ipkey_dst0==0)){
+              app_pkt_hit(1);
+          }
+
+         //for turboflow
+
+
+
+
+          app_total_pkt();   
+
+      }
         forwarding.apply();
     }
 }
